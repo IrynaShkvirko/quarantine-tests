@@ -1,0 +1,7 @@
+node_modules/
+.next/
+.source/
+out/
+next-env.d.ts
+# generated from ../docs by scripts/sync-engineering.mjs
+content/engineering/

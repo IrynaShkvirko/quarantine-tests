@@ -1,0 +1,12 @@
+{
+  "title": "Architecture",
+  "pages": [
+    "index",
+    "components",
+    "data-model",
+    "sequences",
+    "ci-cd-flows",
+    "decision-log",
+    "limitations"
+  ]
+}

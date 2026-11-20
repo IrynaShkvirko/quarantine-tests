@@ -1,0 +1,13 @@
+{
+  "title": "Dashboards & Observability",
+  "pages": [
+    "test-inventory",
+    "flaky-tests",
+    "shadow-mode",
+    "quarantine-and-sla",
+    "ci-cost",
+    "system-kpis",
+    "metrics-and-alerts",
+    "demo-data"
+  ]
+}

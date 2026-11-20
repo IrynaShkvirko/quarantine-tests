@@ -1,0 +1,33 @@
+---
+title: Glossary
+description: The terms used across the docs, dashboards and design spec.
+---
+
+| Term | Meaning |
+| --- | --- |
+| **Candidate** | A test whose flakiness rate meets the threshold; the policy decides what happens next |
+| **Cost score** | Failed attempts × median duration, plus 10 minutes per red build caused; ranks tests by impact |
+| **Cross-run evidence** | A test failed in one run and passed in another (or in a re-run of the same run) on the same commit and environment |
+| **Environment** | The job configuration a test ran in, e.g. `ubuntu-22.04/chromium`; results are only compared within one environment |
+| **Environmental run** | A run where so many tests failed (more than 20%, or 25+ with one fingerprint) that its failures are treated as infrastructure, not flakiness |
+| **Execution group** | One test on one commit in one environment; the unit the flakiness rate counts |
+| **Fingerprint** | Hash of a failure's exception type and normalized message; groups the same failure across runs |
+| **Flaky occurrence** | An execution group with at least one failed and one passed attempt, not caused by infrastructure |
+| **Flakiness rate** | Flaky occurrences ÷ execution groups in the window |
+| **Flip** | A change from pass to fail or back between consecutive runs of a test on the default branch |
+| **Infra signature** | A pattern that marks a failure as infrastructure (out of memory, browser crash, image pull); never counted as flaky |
+| **Probation** | 7 days after release from quarantine when any flaky occurrence sends the test straight back |
+| **Product area** | A part of the product a test covers, set by path rules in `teams.yaml` |
+| **Protected test** | A test that is never quarantined (e.g. smoke or payments tests); flakiness raises an alert instead |
+| **Quarantine** | The test runs in a separate non-blocking CI job instead of the blocking one |
+| **Quarantine gate** | The check on the blocking job that ignores failures of tests listed in `quarantine.yaml` |
+| **Repo token** | A per-repository secret CI uses to upload results |
+| **Rerun evidence** | A test failed and then passed on a framework retry within one job |
+| **Run attempt** | A re-run of the same CI run (e.g. "Re-run failed jobs"); stored with the run, shown as "attempt 2" |
+| **Service token** | The secret for the internal read API until the UI adds sign-in |
+| **Shadow mode** | Detection and decisions run fully, but no pull requests, tickets or messages are sent |
+| **Team cap** | At most 5% of a team's active tests (and always at least 1) can be in quarantine |
+| **Unclassified** | A test whose path and job name match no level rule |
+| **Unowned** | A test with no CODEOWNERS match; handled by QA |
+| **Verification** | Re-running a fixed test many times (10 to 50 depending on level) before it leaves quarantine |
+| **Window** | The last 14 days or the last 30 execution groups, whichever holds more |

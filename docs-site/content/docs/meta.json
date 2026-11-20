@@ -1,0 +1,28 @@
+{
+  "title": "Docs",
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "...getting-started",
+    "---How Detection Works---",
+    "...how-detection-works",
+    "---Quarantine Lifecycle---",
+    "...quarantine-lifecycle",
+    "---CI Integrations---",
+    "...ci-integrations",
+    "---Configuration---",
+    "...configuration",
+    "---Dashboards & Observability---",
+    "...dashboards",
+    "---API Reference---",
+    "...api-reference",
+    "---Architecture---",
+    "...architecture",
+    "---Security---",
+    "...security",
+    "---Operations---",
+    "...operations",
+    "---Help---",
+    "...help"
+  ]
+}

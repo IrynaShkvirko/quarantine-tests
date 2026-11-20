@@ -1,0 +1,12 @@
+{
+  "title": "Configuration",
+  "pages": [
+    "index",
+    "teams-yaml",
+    "quarantine-policy-yaml",
+    "quarantine-yaml",
+    "reason-rules-yaml",
+    "masking-rules-yaml",
+    "settings"
+  ]
+}

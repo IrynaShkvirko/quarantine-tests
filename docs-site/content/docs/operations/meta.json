@@ -1,0 +1,9 @@
+{
+  "title": "Operations",
+  "pages": [
+    "deployment",
+    "upgrades-and-migrations",
+    "retention-and-backups",
+    "releases"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "title": "Getting Started",
+  "pages": [
+    "quickstart",
+    "installation",
+    "connect-a-repository",
+    "shadow-mode-rollout"
+  ]
+}

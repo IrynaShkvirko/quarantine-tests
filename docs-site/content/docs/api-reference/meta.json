@@ -1,0 +1,10 @@
+{
+  "title": "API Reference",
+  "pages": [
+    "index",
+    "ingestion",
+    "webhooks",
+    "read-api",
+    "quarantine-plan"
+  ]
+}

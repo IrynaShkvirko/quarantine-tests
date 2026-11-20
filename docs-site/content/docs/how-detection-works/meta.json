@@ -1,0 +1,10 @@
+{
+  "title": "How Detection Works",
+  "pages": [
+    "index",
+    "flaky-evidence",
+    "rate-and-cost",
+    "infra-and-environmental-runs",
+    "ownership-and-levels"
+  ]
+}

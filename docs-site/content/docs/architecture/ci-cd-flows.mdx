@@ -1,0 +1,183 @@
+---
+title: CI/CD flow diagrams
+description: How results travel from a CI job to the dashboards, and how the push/PR, PR-check and nightly pipelines are built.
+---
+
+Four flows cover everything CI does with this system. The same steps run on GitHub Actions (reusable workflow) and Jenkins (shared library); only the packaging differs.
+
+<Callout title="Source">
+These diagrams come from the design spec ([§9](/engineering/architecture#9-cicd-pipelines)) and the [ingestion flow](/engineering/ingestion-flow). Update them there first.
+</Callout>
+
+## Results: CI job to dashboards
+
+What happens to one upload, including every failure path. The build result never depends on the backend.
+
+```mermaid
+sequenceDiagram
+    box rgb(230, 245, 255) CI job - GitHub Actions or Jenkins
+        participant Run as Test runner<br/>(pytest / Playwright / Jest)
+        participant Rep as Reporter plugin
+        participant Cli as fq-cli
+    end
+
+    box rgb(255, 243, 224) Backend - FastAPI
+        participant API as Ingestion API
+        participant Mask as Masking
+    end
+
+    box rgb(232, 245, 233) Async processing
+        participant Q as Job queue
+        participant W as Worker
+    end
+
+    box rgb(243, 232, 255) Data
+        participant DB as PostgreSQL
+        participant G as Grafana
+    end
+
+    Cli->>Cli: fq fetch-quarantine<br/>(quarantine.yaml from default branch)
+    alt Fetch fails
+        Cli-->>Cli: Use checkout copy, warn in job summary
+    end
+
+    Run->>Run: Run tests except quarantined, up to 2 reruns
+    Run->>Rep: Each attempt's result
+    Rep->>Rep: Write JUnit XML with fq.test_key,<br/>fq.attempt, fq.tags properties
+
+    Cli->>Cli: fq gate (failures minus quarantined list)
+    Note right of Cli: Decides green / red build,<br/>independent of the backend
+
+    Cli->>API: fq upload: POST /api/v1/ingest/runs<br/>(metadata + JUnit, Bearer repo token)
+
+    activate API
+    API->>API: Verify repo token (hashed, constant time)
+    alt Invalid token
+        API-->>Cli: 401
+        Cli-->>Cli: Warn, keep JUnit as CI artifact,<br/>build result unchanged
+    end
+    API->>API: Check sizes, decompressed size, metadata schema
+    alt Too large or invalid
+        API-->>Cli: 413 / 400
+        Cli-->>Cli: Warn, keep artifact, build unchanged
+    end
+    API->>Mask: Masked copy of failure text
+    Mask-->>API: [MASKED:type] replacements
+    API->>DB: INSERT raw_uploads (idempotent on run, attempt, shard, job kind)
+    API->>Q: Defer parse_upload
+    API-->>Cli: 202 { upload_id }
+    deactivate API
+
+    alt Network error or 5xx
+        Cli->>API: Retry up to 3 times with backoff
+        Note right of Cli: Upload never fails the build
+    end
+
+    Q->>W: parse_upload(upload_id)
+    activate W
+    W->>W: Parse XML safely (defusedxml, limits)
+    alt Parse error
+        W->>DB: raw_uploads.status = failed + summary
+    end
+    W->>W: Normalize: test keys, attempts, tags, skips
+    W->>DB: Upsert ci_run (merge shards), tests, executions
+    W->>Q: Enqueue detection (ownership → classify → evidence)
+    deactivate W
+
+    Q->>W: Detection tasks (M2)
+    W->>DB: flaky_events, rates, shadow decisions
+    G->>DB: Read reporting.* views
+    G-->>G: Test inventory, Flaky tests, Shadow mode dashboards
+```
+
+## Push and PR pipeline
+
+Quarantined tests run in a separate non-blocking job. The gate on the blocking job is a safety net for tests that exclusion missed.
+
+```mermaid
+flowchart TD
+  A[Checkout commit] --> B["Fetch quarantine.yaml from default branch<br/>git fetch origin main, git show origin/main:quarantine.yaml"]
+  B --> B1{Fetch OK?}
+  B1 -- Yes --> C[Use default-branch list]
+  B1 -- No --> C2[Fall back to checkout copy, warn in job summary]
+  C --> SPLIT
+  C2 --> SPLIT
+  SPLIT{{Two jobs in parallel}}
+
+  SPLIT --> J1[Blocking job: run all tests except quarantined, up to 2 reruns]
+  J1 --> D{JUnit files found and test count > 0?}
+  D -- No --> X[Fail: test runner crashed]
+  D -- Yes --> E["Quarantine gate (safety net):<br/>failed tests minus quarantined list"]
+  E --> F{Any failures left?}
+  F -- No --> G[Blocking job passes]
+  F -- Yes --> H[Blocking job fails, lists failures]
+
+  SPLIT --> J2["Quarantine job (non-blocking, separate runner):<br/>run only quarantined tests, up to 2 reruns"]
+  J2 --> J2a[Always succeeds, results in job summary]
+
+  G --> U[Upload JUnit + metadata per shard and job_kind<br/>always runs, 3 retries, never fails the build]
+  H --> U
+  X --> U
+  J2a --> U
+  U --> Z{Blocking job result}
+  Z -- pass --> OK([Build green])
+  Z -- fail --> KO([Build red])
+```
+
+## PR checks: stress-run and skip lint
+
+New or changed tests run 10 times before merge, and new unconditional skips fail the lint check.
+
+```mermaid
+flowchart TD
+  A[PR opened or updated] --> B[git diff against merge base]
+  B --> C{New or changed test files?}
+  C -- No --> S([Skip stress-run])
+  C -- Yes --> D[Run changed tests 10 times, no reruns]
+  D --> E[Upload results, event=stress]
+  E --> F{Consistent results across all 10?}
+  F -- Yes --> P([Stress check passes])
+  F -- No --> R([Stress check fails: flaky before merge])
+
+  B --> L[Skip lint on changed lines]
+  L --> L1{New unconditional skip, xfail, fixme, it.skip?}
+  L1 -- No --> LP([Lint passes])
+  L1 -- Yes --> L2{"Line has fq-allow-skip: JIRA-KEY?"}
+  L2 -- Yes --> LA([Lint passes, allowance recorded])
+  L2 -- No --> LF([Lint fails])
+```
+
+## Nightly pipeline
+
+The full suite runs on the default branch, and the quarantine job verifies fixes within a time budget: verifying tests first, then the oldest quarantined.
+
+```mermaid
+flowchart TD
+  N([Nightly trigger]) --> A[Full suite on main: same steps as 9.1, event=nightly]
+  N --> SC[Static scan for manual skips, upload to manual_skips]
+  N --> Q[Quarantine job]
+  Q --> Q1["GET /quarantine-plan<br/>ordered list, repetitions, shard assignment"]
+  Q1 --> Q2{Any tests in plan?}
+  Q2 -- No --> QZ([Done])
+  Q2 -- Yes --> Q3["Run in parallel shards (default 4)<br/>Priority: Verifying, then oldest quarantined"]
+  Q3 --> Q4["Repetitions: Verifying = per level (50 / 25 / 10)<br/>Monitoring = 3. Stop each test at first failure"]
+  Q4 --> Q5{Budget reached? default 60 min}
+  Q5 -- No --> Q4
+  Q5 -- Yes --> Q6[Stop starting new tests; tests not reached go first tomorrow]
+  Q6 --> Q7[Upload results, event=quarantine, job always succeeds]
+  Q7 --> Q8[Backend: verify, update flakiness data, record carry-over]
+```
+
+## Next steps
+
+<Cards>
+  <Card title="GitHub Actions" href="/docs/ci-integrations/github-actions">
+    Add the reusable workflow to a repository.
+  </Card>
+  <Card title="Jenkins" href="/docs/ci-integrations/jenkins">
+    Use the shared library steps.
+  </Card>
+  <Card title="Ingestion API" href="/docs/api-reference/ingestion">
+    The upload contract.
+  </Card>
+</Cards>

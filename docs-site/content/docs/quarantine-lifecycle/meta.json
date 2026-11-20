@@ -1,0 +1,13 @@
+{
+  "title": "Quarantine Lifecycle",
+  "pages": [
+    "states",
+    "protected-tests-and-cap",
+    "bot-prs",
+    "jira-and-sla",
+    "verification-and-probation",
+    "max-age",
+    "product-bug-path",
+    "reflakes-renames-skips"
+  ]
+}
