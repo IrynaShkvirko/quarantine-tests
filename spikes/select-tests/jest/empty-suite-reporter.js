@@ -13,6 +13,9 @@ class EmptySuiteReporter {
     this.ignored = [];
   }
   onTestFileResult(test, testResult, aggregatedResults) {
+    // Only when the registration filter is active; otherwise an empty file is a real failure.
+    const mode = process.env.FQ_QUARANTINE_MODE || 'off';
+    if (mode === 'off' || process.env.FQ_JEST_STRATEGY === 'name') return;
     const err = testResult.testExecError;
     if (testResult.testResults.length !== 0 || !err || err.message !== MESSAGE) return;
     this.ignored.push(testResult.testFilePath);

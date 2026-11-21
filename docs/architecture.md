@@ -42,7 +42,7 @@ Scope: Portfolio/demo build, designed to scale to a real team's CI
 | D8 | Protected tests | Policy file per repo is the source of truth; test markers are a second layer |
 | D9 | Cap | At most 5% of a team's tests per repo can be quarantined. Above that, auto-quarantine stops, the lead is alerted, and a human decides. In shadow mode, open "would auto-quarantine" decisions count toward the cap, so shadow numbers match what enforce mode would do |
 | D10 | Pipelines | Quarantined tests run in a **separate non-blocking job**. The quarantine gate on the blocking job stays as a safety net |
-| D11 | Quarantine list | CI reads `quarantine.yaml` from the **default branch**, and never reads the PR checkout's copy (PR-controlled). If the fetch fails, it uses the backend's last-known-good list (`GET /api/v1/repos/{repo}/quarantine`, 8.1), and fails the job if that is unavailable too. Test selection and the quarantine gate use the same fetched list |
+| D11 | Quarantine list | CI reads `quarantine.yaml` from the **default branch**, and never reads the PR checkout's copy (PR-controlled). If the fetch fails, it uses the backend's last-known-good list (`GET /api/v1/repos/{repo}/quarantine`, 8.1), and fails the job if that is unavailable too. Test selection and the quarantine gate use the same fetched list. Fork PRs have no repo token, so they get only the git path: if the fetch fails there, the job fails rather than trusting the fork's copy |
 | D12 | Exit | Jira Done **and** a commit/PR referencing the ticket merged to the default branch → verification (unit/API 50×, integration 25×, e2e 10×) → release → **7-day probation** on `main` |
 | D13 | SLA | Due date is 4 days after the ticket is created. When overdue, the team lead gets a Slack message |
 | D14 | Max age | After 30 days in quarantine, a forced decision is required: fix, rewrite or delete. Decisions are tracked in the digest |
@@ -562,7 +562,7 @@ The domain layer has no I/O, so detection, policy and the state machine can be u
 | POST | `/api/v1/ingest/runs` | Repo bearer token | Upload JUnit files + run metadata (multipart, one call per shard). Returns `202` with an `upload_id` |
 | GET | `/api/v1/ingest/runs/{upload_id}` | Repo token | Processing status |
 | GET | `/api/v1/repos/{repo}/quarantine-plan` | Repo token | Nightly job plan: ordered tests, repetitions, shard assignment (9.3) |
-| GET | `/api/v1/repos/{repo}/quarantine` | Repo token | Last-known-good quarantine list (D11 fallback): the test keys from the default-branch `quarantine.yaml` as last synced by the backend (push webhook or `config_sync`), with the source commit SHA and sync time. Only the token's own repo (`403` otherwise). `fq fetch-quarantine` calls it only when the git fetch fails |
+| GET | `/api/v1/repos/{repo}/quarantine` | Repo token | Last-known-good quarantine list (D11 fallback). `{repo}` is URL-encoded as one path segment (`acme%2Fshop-web`), as for `quarantine-plan`: the test keys from the default-branch `quarantine.yaml` as last synced by the backend (push webhook or `config_sync`), with the source commit SHA and sync time. Only the token's own repo (`403` otherwise). `fq fetch-quarantine` calls it only when the git fetch fails |
 | POST | `/api/v1/webhooks/github` | HMAC signature | `pull_request` closed/merged, `push` to default branch and config repo |
 | POST | `/api/v1/webhooks/jira` | Shared secret | `jira:issue_updated` (status, Flaky reason, Quarantine decision, labels) |
 | GET | `/api/v1/tests` | Service token (OAuth from M7) | Filter by repo, team, area, level, state |
@@ -1259,7 +1259,7 @@ Take a baseline in shadow mode, then compare after enforcing. This is how you sh
 - **Read API service token (D35):** one random secret (`secrets.token_urlsafe(32)`) in `FQ_READ_API_TOKEN`, stored in the secret manager, sent as `Authorization: Bearer <token>` and compared in constant time; missing or wrong → 401. Used by scripts, debugging and later the UI's backend; Grafana doesn't use it (it reads the database through `grafana_ro`). Rotated by replacing the secret and restarting the API. Replaced by GitHub OAuth when the UI arrives (M7).
 - **Webhooks:** HMAC signature check for GitHub; shared secret plus IP allowlist for Jira Cloud.
 - **GitHub App:** least privilege and a ruleset bypass limited to `quarantine.yaml` changes (9.5).
-- **Ingress:** only `/api/v1/ingest/*`, `/api/v1/webhooks/*`, `/api/v1/repos/*/quarantine-plan` and `/api/v1/repos/*/quarantine` are public. The read API (`/api/v1/tests`, `/stats`, `/quarantine`) is reachable only inside the cluster, and still requires the service token. Grafana sits behind OAuth.
+- **Ingress:** only `/api/v1/ingest/*`, `/api/v1/webhooks/*`, `/api/v1/repos/{repo}/quarantine-plan` and `/api/v1/repos/{repo}/quarantine` are public, matched as exact paths with `{repo}` as a single URL-encoded segment (no prefix rules). The read API (`/api/v1/tests`, `/stats`, `/quarantine`) is reachable only inside the cluster, and still requires the service token. Grafana sits behind OAuth.
 
 ---
 

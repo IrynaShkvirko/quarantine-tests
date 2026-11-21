@@ -14,15 +14,18 @@ Given the test keys in `quarantine.yaml`, can each framework (a) run everything 
 |-----------|-----------|------------------|------------------|----------|
 | pytest | Plugin: `pytest_collection_modifyitems` + `pytest_deselected` | yes | 0 | yes, no slowdown |
 | Playwright | **`--test-list` / `--test-list-invert <file>`** (recommended) | yes | 0 | yes, no slowdown |
-| Playwright | `grep` / `grepInvert` built in `playwright.config.ts` (fallback) | yes | 0 | yes, but **87 s** with long keys (see below) |
+| Playwright | `grep` / `grepInvert` built in `playwright.config.ts` (fallback) | **no**: 479 / 21 (space-joined levels, see below) | 0 | same, and **87 s** with long keys (see below) |
 | Jest | **Registration filter**: `setupFilesAfterEnv` wraps `describe` / `test` / `it` (recommended) + `empty-suite-reporter` | yes | 0 | yes, +1 s |
-| Jest | `-t` with a name regex (the §9 approach) | **no** | **20 / 480** | n/a |
+| Jest | `-t` with a name regex (the §9 approach) | **no** | **21 / 479** | n/a |
 
 All three recommended mechanisms ran exactly the 480 non-listed tests in exclude mode and exactly the 20 listed
-tests in only mode, on a 500-test suite per framework. The list contains every hard case **except** titles with
+tests in only mode, on a 500-test suite per framework, with the runner exiting 0. With an empty list, exclude ran all
+500 and only ran none. The list contains every hard case **except** titles with
 ` > ` for Playwright: those live in a separate mini suite (`playwright-gt`) because neither Playwright mechanism can
 select them, so for that one case the acceptance criterion is **not met** for Playwright (see Hard cases). The oracle is the set of
-executed keys, compared for equality (`run_all.py`), not just a count.
+executed keys, compared for equality (`run_all.py`), not just a count. A case passes only if that set is exact, JUnit has
+no `<skipped>`, and the runner's exit code is the expected one; every case writes its own output files, deleted before
+the run, so a crashed run can't be judged on an earlier case's output.
 
 ### Decision
 
@@ -30,7 +33,8 @@ executed keys, compared for equality (`run_all.py`), not just a count.
    `FQ_QUARANTINE_MODE=exclude|only|off`. Never inline on the command line.
 2. **pytest:** plugin option `--quarantine-file` / `--quarantine-mode` defaulting to those env vars.
 3. **Playwright:** `fq` converts the YAML into a test-list file and passes `--test-list-invert` (blocking job) or
-   `--test-list` (quarantine job). Keep the `grep` builder as a fallback for Playwright versions without the flag.
+   `--test-list` (quarantine job). Keep the `grep` builder only as a fallback for Playwright versions without the
+   flag; it is not exact (it over-selects when levels differ only in where a space falls).
 4. **Jest:** do not use `-t` / `--testPathPattern` as §9 describes. Use the registration filter, configured through
    `jest.config.js` + env. Only mode additionally narrows `testRegex` to the files that contain listed tests.
 
@@ -50,13 +54,15 @@ From the security review of this spike. The prototypes are throwaway and do not 
    semantics). Plugins that read a pre-validated list also drop the PyYAML / `yaml` runtime dependency.
 3. **Fail closed on configuration.** Whitelist `FQ_QUARANTINE_MODE` (`off|exclude|only`) and fail the job on any other
    value. Fail when the mode is not `off` and the file is unset, missing or unreadable, in all three adapters. The
-   prototypes are inconsistent: pytest raises, Playwright and Jest return an unfiltered config (so `only` runs everything).
+   prototypes are inconsistent: pytest raises on a missing file and on an unknown mode (verified: `FQ_QUARANTINE_MODE=onyl`
+   exits 4 with a usage error), while Playwright and Jest return an unfiltered config (so `only` runs everything).
 4. **Reconcile after the run.** A quarantine or verification job that executes 0 tests, or fewer than the keys in its list,
    must not count as a pass or a verified fix. Causes seen in the spike: Playwright `--test-list` matching nothing (exit 0),
    pytest nodeid prefix mismatch, Jest run from a directory other than `rootDir` (`register-filter.js` computes paths
    from `process.cwd()`).
-5. **Scope the Jest empty-suite suppression.** `empty-suite-reporter.js` hides every empty file in exclude mode. Production
-   code should suppress it only when every test key for that file is in the list.
+5. **Scope the Jest empty-suite suppression.** `empty-suite-reporter.js` is a no-op unless the registration filter is active
+   (verified: an empty file still fails a run with `FQ_QUARANTINE_MODE=off`), but with the filter active it hides every
+   empty file. Production code should suppress it only when every test key for that file is in the list.
 6. **Do not ship Playwright `grep` without a pattern-size cap** (the file is influenced by PRs; see the size cliff). Prefer
    `--test-list`.
 7. **`escapeRegExp` escapes `-` and `/`**, valid only for regexes without the `u` / `v` flag. Copy it with a property test.
@@ -81,7 +87,9 @@ below, which the owner asked for. Everything else in this list still needs a dec
   too; the gate uses the same fetched list as test selection. Edited locations: `docs/architecture.md` D11, §4.3 safety
   net, §8.1 (new repo-token endpoint `GET /api/v1/repos/{repo}/quarantine`), §9.1 flowchart (fetch fallback and gate
   node), §13 (repo-token scope and Ingress allow-list); `docs/ingestion-flow.md` (sequence and the "CI depends on the
-  backend only as a fallback" property); `docs-site/content/docs/architecture/ci-cd-flows.mdx` (both diagrams).
+  backend only as a fallback" property); `docs-site/content/docs/architecture/ci-cd-flows.mdx` (both diagrams); `docs-site/content/docs/index.mdx` (the "CI never
+  waits" principle). D11 also says fork PRs get only the git path, and §8.1 / §13 say `{repo}` is one URL-encoded
+  segment matched by exact ingress paths.
   Implementation belongs to the M-tasks that build `fq fetch-quarantine`, `fq gate` and the API.
 - **§3.1 key format** is ambiguous when a title contains ` > ` (see "Hard cases"). Not fixable in the plugins.
 
@@ -90,7 +98,8 @@ below, which the owner asked for. Everything else in this list still needs a dec
 - Fixture per framework: 500 tests in 28 files, 20 listed. Generated by `generate.py` into `spikes/select-tests/.generated/`.
 - The 20 listed keys per framework mix plain tests with hard cases. Decoys (similar but not listed) stay in the run:
   pytest `[1]` vs `[10]`, `[a[b]c]` vs `[a[b]`, `x::y` vs `x::z`; Playwright / Jest "Outer > nested" vs
-  "Outer > Inner > nested", and two files with the same `Dup > same title`.
+  "Outer > Inner > nested", two files with the same `Dup > same title`, and `Space A > B c` vs `Space A B > c`
+  (same text once levels are joined with spaces).
 - Versions: pytest 9.2.0, Playwright 1.65.1, Jest 30.5.2, jest-junit 16.0.0, Node 22.23.5, Python 3.12, macOS arm64.
   One machine, Playwright with 4 workers, medians of 5 runs.
 - Run it: `cd spikes/select-tests && pnpm install --ignore-workspace && uv venv --python 3.12 .venv &&
@@ -124,13 +133,20 @@ along the path, so no regex escaping is needed. Semantics to know:
 
 - It is a **prefix** match on the title path: a line naming a `describe` selects everything under it.
 - Lines are split on `>` (or `›`), so a title that contains `>` can never be matched (see Hard cases).
-- A list that matches nothing exits 0 with an empty run (`tests="0"`). The adapter must check the test count
-  (§9.1 already fails on count 0 for the blocking job; the quarantine job needs the same check for only mode).
-- Output has 0 skipped and exactly 480 / 20 tests, also with 300 keys (1.8 s / 1.0 s).
+- A list that matches nothing exits 0 with an empty run (`tests="0"`), and so does an empty list file in only mode
+  (it selects nothing, not everything; checked in the matrix). grep in the same situation exits 1 with "No tests found".
+  The adapter must check the test count (§9.1 already fails on count 0 for the blocking job; the quarantine job needs
+  the same check for only mode).
+- Output has 0 skipped and exactly 480 / 20 tests, also with 300 keys (1.8 s / 0.9 s).
 
 **`grep` / `grepInvert` (fallback).** Playwright matches the regex against `titlePath().join(' ')`, which is
 `<project> <file> <describes...> <title>`. The builder escapes each title and joins with spaces, anchored with
-`(?:^|\s)...$`. Exact for all hard cases, 0 skipped. Caveats:
+`(?:^|\s)...$`. 0 skipped, and right for every hard case except one, but **not exact**:
+
+- **Levels are joined by spaces, so a space in a title is ambiguous.** `describe "Space A"` + `test "B c"` and
+  `describe "Space A B"` + `test "c"` both match `Space A B c`. With the first one listed, grep also excluded the
+  second (479 run in exclude mode) and also ran it in only mode (21). The fixture has this decoy; `--test-list` and the
+  Jest registration filter handle it.
 
 - **Size cliff.** One alternation regex is fast until the pattern passes about 50–60 KB, then V8 slows by 100x:
   500 matches take 15 ms at 51 KB and 1.6 s at 62 KB, and 43 s at 202 KB. Playwright applies it repeatedly, so
@@ -163,9 +179,11 @@ title, unicode, nested describes and same-title-in-two-files.
 
 **`-t` name regex (the §9 approach), measured through `jest.run()` so the command line is not a factor.** Fails:
 
-- JUnit has `<skipped/>` for every filtered test: 20 in exclude mode, 480 in only mode.
+- JUnit has `<skipped/>` for every filtered test: 21 in exclude mode, 479 in only mode (the counts are off by one
+  because of the space decoy below).
 - `-t` sees only `describe test` joined by single spaces, **no file**. Two tests with the same name in different files
-  cannot be told apart: exclude also dropped `dup_b` (not listed), only also ran `dup_b`.
+  cannot be told apart: exclude also dropped `dup_b` (not listed), only also ran `dup_b`. The space decoy fails the
+  same way as with Playwright grep.
 - A name containing ` > ` cannot be rebuilt from the key by splitting on ` > `, so `arrow a > b in title` was missed
   (it ran in exclude mode and was not selected in only mode).
 - `-t` (`testNamePattern`) is a CLI / global option, not a per-project config key. Passing it on a real command line hits the
@@ -188,9 +206,11 @@ to avoid. The registration filter does the job from `setupFilesAfterEnv` without
 | Regex chars `( ) [ ] . * + ? $ ^ \|` | ok | ok | ok (escaped) | ok | ok (escaped) |
 | Quotes, backticks | ok | ok | ok | ok | ok |
 | Nested `describe` + decoy one level up | ok (classes) | ok | ok | ok | ok |
+| Space moved between describe and title (`Space A > B c` vs `Space A B > c`) | n/a | ok | **fails** (over-selects) | ok | **fails** |
 | Same title in two files, one listed | ok | ok | ok | ok | **fails** |
 | Title containing ` > ` | n/a | **never matches, exits 0 with 0 tests** | **never matches**, `No tests found`, exit 1 | ok (string equality), see below | **fails** |
-| 300 keys | ok | ok | ok below ~50 KB, else slow | ok | not exact either (same failures as above, measured) |
+| 300 keys | ok | ok | same as above; fast below ~50 KB, else slow | ok | not exact either (same failures as above, measured) |
+| Empty list (exclude runs 500, only runs 0) | ok (only: exit 5) | ok (only: exit 0) | ok (only: exit 1) | ok (only: exit 1, no output files) | not run |
 
 **` > ` in titles is a key-format problem (§3.1).** `describe "A"` + `test "B > C"` and `describe "A > B"` + `test "C"`
 both produce `A > B > C`. Registration filtering by string equality selects both (over-selection, never
@@ -201,22 +221,23 @@ ambiguity. Because the blocking job keeps the quarantine gate (§4.3 safety net)
 
 Median of 5 runs, wall clock including process start; numbers are from `results/results.json` of the last full run
 (re-runs vary by about ±0.1 s). The suite is trivial (`expect(1).toBe(1)`), so these numbers are selection +
-framework overhead, not test time.
+framework overhead, not test time. Both Playwright mechanisms are timed with the same 20-key list (an earlier version
+of this table timed test-list with the 300-key file by mistake, which made it look slower than grep; it is not).
 
 | Framework | Plain | Exclude | Only | Notes |
 |-----------|-------|---------|------|-------|
-| pytest collect only | 0.159 s | 0.178 s | 0.171 s | plugin cost within noise |
-| pytest full run | 0.241 s | 0.253 s | 0.177 s | |
-| Playwright `--list` | 0.418 s | 0.415 s (grep) | 0.414 s (grep) / 0.570 s (test-list) | |
-| Playwright full run | 1.594 s | 1.542 s grep / 1.826 s test-list | 0.793 s grep / 0.975 s test-list | 4 workers, noise about ±0.2 s |
-| Jest full run | 0.789 s | 0.948 s (register) / 0.836 s (`-t`) | 0.644 s (register) / 0.710 s (`-t`) | Jest has no collect-only mode |
+| pytest collect only | 0.159 s | 0.173 s | 0.176 s | plugin cost within noise |
+| pytest full run | 0.236 s | 0.259 s | 0.186 s | |
+| Playwright `--list` | 0.418 s | 0.423 s (grep) | 0.437 s (grep) / 0.418 s (test-list) | |
+| Playwright full run | 1.804 s | 1.642 s grep / 1.636 s test-list | 0.877 s grep / 0.792 s test-list | 4 workers, noise about ±0.2 s |
+| Jest full run | 0.719 s | 0.967 s (register) / 0.811 s (`-t`) | 0.625 s (register) / 0.670 s (`-t`) | Jest has no collect-only mode |
 
 Selection overhead is within run-to-run noise for pytest and Playwright at 500 tests. The Jest registration filter
-adds a small but consistent ~0.1–0.16 s in exclude mode (seen in three full runs), from loading the YAML in every test
+adds a small but consistent ~0.1–0.25 s in exclude mode (seen in four full runs), from loading the YAML in every test
 file's VM; reading a pre-validated list from `fq` (security requirement 2) should shrink it. The one measured
 exception is the Playwright grep regex above ~50 KB (the regex timings in that section are from ad-hoc Node
 scripts, not part of `run_all.py` or `results.json`; only the 87 s end-to-end figure is). With 300 keys (20 real + 280 padding): pytest 0.8 s, Playwright
-test-list 1.8 s / 1.0 s, Jest register 1.7 s / 1.7 s.
+test-list 1.8 s / 0.9 s, Jest register 1.7 s / 1.6 s.
 
 ## Limits of this spike
 

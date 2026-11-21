@@ -108,9 +108,11 @@ PW_HARD = [
     ("e2e/hard.spec.ts", ["Group (a|b) [x]"], "regex chars in describe"),
     ("e2e/dup_a.spec.ts", ["Dup"], "same title"),
     ("e2e/dup_b.spec.ts", ["Dup"], "same title"),  # decoy
+    ("e2e/hard.spec.ts", ["Space A"], "B c"),
+    ("e2e/hard.spec.ts", ["Space A B"], "c"),  # decoy: same text once levels are space-joined
 ]
 # Listed subset of PW_HARD (by index)
-PW_HARD_LISTED = {0, 1, 2, 3, 5, 6, 7}
+PW_HARD_LISTED = {0, 1, 2, 3, 5, 6, 7, 9}
 # Titles that contain " > ": ambiguous with the separator of §3.1 (see findings)
 PW_GT = [
     ("e2e/gt.spec.ts", ["A"], "B > C"),
@@ -188,8 +190,10 @@ JEST_HARD = [
     ("src/hard.test.js", ["Group (a|b) [x]"], "regex chars in describe"),
     ("src/dup_a.test.js", ["Dup"], "same title"),
     ("src/dup_b.test.js", ["Dup"], "same title"),  # decoy
+    ("src/hard.test.js", ["Space A"], "B c"),
+    ("src/hard.test.js", ["Space A B"], "c"),  # decoy: same text once levels are space-joined
 ]
-JEST_HARD_LISTED = {0, 1, 2, 3, 5, 6, 7}
+JEST_HARD_LISTED = {0, 1, 2, 3, 5, 6, 7, 9}
 
 
 def gen_jest() -> list[str]:
@@ -234,7 +238,7 @@ def gen_jest() -> list[str]:
 HERE = Path(__file__).parent
 
 PW_CONFIG = """import {{ defineConfig }} from '@playwright/test';
-import {{ selection }} from '{here}/playwright/quarantine-select';
+import {{ selection }} from {pw_select};
 
 export default defineConfig({{
   testDir: '.',
@@ -245,21 +249,30 @@ export default defineConfig({{
 }});
 """
 
-JEST_CONFIG = """const select = require('{here}/jest/quarantine-select');
+JEST_CONFIG = """const select = require({jest_select});
 module.exports = {{
   rootDir: __dirname,
   testMatch: ['**/*.test.js'],
-  reporters: ['{here}/jest/empty-suite-reporter.js', ['{here}/node_modules/jest-junit', {{ outputDirectory: '.', outputName: process.env.FQ_JUNIT || 'junit.xml' }}]],
+  reporters: [{jest_empty}, [{jest_junit}, {{ outputDirectory: '.', outputName: process.env.FQ_JUNIT || 'junit.xml' }}]],
   ...select.jestConfig(),
 }};
 """
 
 
 def write_configs() -> None:
-    here = str(HERE)
-    (ROOT / "playwright" / "playwright.config.ts").write_text(PW_CONFIG.format(here=here))
-    (ROOT / "playwright-gt" / "playwright.config.ts").write_text(PW_CONFIG.format(here=here))
-    (ROOT / "jest" / "jest.config.js").write_text(JEST_CONFIG.format(here=here))
+    def js(p: Path) -> str:  # a JS string literal, safe for quotes and backslashes in the path
+        return json.dumps(p.as_posix())
+
+    pw = PW_CONFIG.format(pw_select=js(HERE / "playwright" / "quarantine-select"))
+    (ROOT / "playwright" / "playwright.config.ts").write_text(pw)
+    (ROOT / "playwright-gt" / "playwright.config.ts").write_text(pw)
+    (ROOT / "jest" / "jest.config.js").write_text(
+        JEST_CONFIG.format(
+            jest_select=js(HERE / "jest" / "quarantine-select"),
+            jest_empty=js(HERE / "jest" / "empty-suite-reporter.js"),
+            jest_junit=js(HERE / "node_modules" / "jest-junit"),
+        )
+    )
 
 
 def main() -> None:

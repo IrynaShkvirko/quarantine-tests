@@ -19,6 +19,7 @@ import pytest
 import yaml
 
 PREFIX = "pytest::"
+MODES = frozenset({"off", "exclude", "only"})
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -26,7 +27,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--quarantine-file", default=os.environ.get("FQ_QUARANTINE_FILE"))
     group.addoption(
         "--quarantine-mode",
-        choices=["off", "exclude", "only"],
+        choices=sorted(MODES),
         default=os.environ.get("FQ_QUARANTINE_MODE", "off"),
     )
 
@@ -40,6 +41,8 @@ def load_keys(path: str | Path) -> frozenset[str]:
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     mode = config.getoption("--quarantine-mode")
+    if mode not in MODES:  # an env default bypasses argparse `choices`; fail closed
+        raise pytest.UsageError(f"FQ_QUARANTINE_MODE must be one of {sorted(MODES)}, got {mode!r}")
     if mode == "off":
         return
     path = config.getoption("--quarantine-file")

@@ -36,6 +36,31 @@ def run(
     return time.perf_counter() - t0, p
 
 
+def fresh(*paths: Path) -> None:
+    """Delete outputs before a run, so a crashed run can't be judged on an earlier case's files."""
+    for p in paths:
+        p.unlink(missing_ok=True)
+
+
+def tag_of(qfile: str) -> str:
+    return Path(qfile).stem  # quarantine, quarantine-300, empty
+
+
+def write_test_list(qfile: Path, out: Path) -> None:
+    subprocess.run(
+        [
+            "node",
+            "--experimental-strip-types",
+            "--no-warnings",
+            str(HERE / "playwright/quarantine-select.ts"),
+            str(qfile),
+            str(out),
+        ],
+        check=True,
+        cwd=HERE,
+    )
+
+
 def skipped_in_junit(path: Path) -> int:
     return sum(1 for _ in ET.parse(path).getroot().iter("skipped"))
 
@@ -103,15 +128,23 @@ def verdict(
     skipped: int,
     secs: float,
     extra: dict | None = None,
+    exit_code: int = 0,
+    expected_exit: int = 0,
 ) -> dict:
     want = listed if mode == "only" else want_all - listed
-    ok = got == want
+    exact = got == want
+    # A case passes only if the executed set is exact, nothing is reported as skipped,
+    # and the runner exited as expected (a failing build with the right tests is still a failure).
+    ok = exact and skipped == 0 and exit_code == expected_exit
     r = {
         "case": name,
         "mode": mode,
         "ran": len(got),
         "expected": len(want),
-        "exact": ok,
+        "exact": exact,
+        "pass": ok,
+        "exit": exit_code,
+        "expected_exit": expected_exit,
         "skipped_in_junit": skipped,
         "seconds": round(secs, 3),
         "missing": sorted(want - got)[:5],
@@ -131,7 +164,8 @@ def all_keys_pytest() -> Keys:
 
 def case_pytest(mode: str, qfile: str = "quarantine.yaml", tag: str = "pytest") -> dict:
     cwd = GEN / "pytest"
-    junit = cwd / f"junit-{mode}.xml"
+    junit = cwd / f"junit-{tag_of(qfile)}-{mode}.xml"
+    fresh(junit)
     env = {
         "PYTHONPATH": str(HERE / "pytest"),
         "FQ_QUARANTINE_FILE": f"../{qfile}",
@@ -152,8 +186,12 @@ def case_pytest(mode: str, qfile: str = "quarantine.yaml", tag: str = "pytest") 
         cwd,
         env,
     )
+    if not junit.exists():
+        return missing_output(tag, mode, secs, p.returncode)
     allk = pytest_expected(list(all_keys_pytest()))
-    listed = pytest_expected(EXPECTED["pytest"])
+    listed = pytest_expected(listed_for("pytest", qfile))
+    # pytest exits 5 when every test is deselected (empty only-mode run)
+    expected_exit = 5 if mode == "only" and not listed else 0
     return verdict(
         tag,
         mode,
@@ -162,50 +200,51 @@ def case_pytest(mode: str, qfile: str = "quarantine.yaml", tag: str = "pytest") 
         listed,
         skipped_in_junit(junit),
         secs,
-        {"exit": p.returncode},
+        exit_code=p.returncode,
+        expected_exit=expected_exit,
     )
 
 
 def case_playwright(mode: str, variant: str, qfile: str = "quarantine.yaml") -> dict:
     cwd = GEN / "playwright"
-    junit, rj = cwd / "junit.xml", cwd / "result.json"
+    stem = f"{variant}-{tag_of(qfile)}-{mode}"
+    junit, rj = cwd / f"junit-{stem}.xml", cwd / f"result-{stem}.json"
+    fresh(junit, rj)
     env = {
         "FQ_QUARANTINE_FILE": f"../{qfile}",
         "FQ_QUARANTINE_MODE": mode if variant == "grep" else "off",
+        "FQ_JUNIT": junit.name,
+        "FQ_JSON": rj.name,
     }
     cmd = [str(BIN / "playwright"), "test"]
     if variant == "test-list":
-        lst = cwd / f"list-{mode}.txt"
-        subprocess.run(
-            [
-                "node",
-                "--experimental-strip-types",
-                "--no-warnings",
-                str(HERE / "playwright/quarantine-select.ts"),
-                str(GEN / qfile),
-                str(lst),
-            ],
-            check=True,
-            cwd=HERE,
-        )
+        lst = cwd / f"list-{tag_of(qfile)}-{mode}.txt"
+        write_test_list(GEN / qfile, lst)
         cmd += ["--test-list" if mode == "only" else "--test-list-invert", str(lst)]
     secs, p = run(cmd, cwd, env)
-    listed = set(EXPECTED["playwright"])
+    name = f"playwright/{variant}"
+    if not (junit.exists() and rj.exists()):
+        return missing_output(name, mode, secs, p.returncode)
+    listed = set(listed_for("playwright", qfile))
     _, lp = run(
         [str(BIN / "playwright"), "test", "--list", "--reporter=json"],
         cwd,
         {"FQ_QUARANTINE_MODE": "off"},
     )
     allk = pw_all_from_list(lp.stdout)
+    # Nothing selected: grep exits 1 ("No tests found"); --test-list exits 0 silently, which
+    # is why the adapter must check the executed count itself (security requirement 4).
+    expected_exit = 1 if mode == "only" and not listed and variant == "grep" else 0
     return verdict(
-        f"playwright/{variant}",
+        name,
         mode,
         pw_keys(rj),
         allk,
         listed,
         skipped_in_junit(junit),
         secs,
-        {"exit": p.returncode},
+        exit_code=p.returncode,
+        expected_exit=expected_exit,
     )
 
 
@@ -227,7 +266,9 @@ def jest_run(
     mode: str, strategy: str, qfile: str
 ) -> tuple[float, subprocess.CompletedProcess[str], Path, Path]:
     cwd = GEN / "jest"
-    junit, rj = cwd / f"junit-{strategy}-{mode}.xml", cwd / f"result-{strategy}-{mode}.json"
+    stem = f"{strategy}-{tag_of(qfile)}-{mode}"
+    junit, rj = cwd / f"junit-{stem}.xml", cwd / f"result-{stem}.json"
+    fresh(junit, rj)
     env = {
         "FQ_QUARANTINE_FILE": f"../{qfile}",
         "FQ_QUARANTINE_MODE": mode,
@@ -255,17 +296,57 @@ def case_jest(
     mode: str, strategy: str, qfile: str = "quarantine.yaml", allk: Keys | None = None
 ) -> dict:
     secs, p, junit, rj = jest_run(mode, strategy, qfile)
+    name = f"jest/{strategy}"
+    listed = set(listed_for("jest", qfile))
+    if mode == "only" and not listed:
+        # Nothing selected: Jest exits 1 with "No tests found" and its reporters write nothing.
+        ran_nothing = "No tests found" in p.stdout + p.stderr and not rj.exists()
+        return verdict(
+            name,
+            mode,
+            set() if ran_nothing else {"<unexpected output>"},
+            allk or set(),
+            listed,
+            0,
+            secs,
+            exit_code=p.returncode,
+            expected_exit=1,
+        )
+    if not (junit.exists() and rj.exists()):
+        return missing_output(name, mode, secs, p.returncode)
     got, pending = jest_keys(rj, GEN / "jest")
     return verdict(
-        f"jest/{strategy}",
+        name,
         mode,
         got,
         allk or set(),
-        set(EXPECTED["jest"]),
+        listed,
         skipped_in_junit(junit),
         secs,
-        {"exit": p.returncode, "pending_in_json": pending},
+        {"pending_in_json": pending},
+        exit_code=p.returncode,
     )
+
+
+def listed_for(fw: str, qfile: str) -> list[str]:
+    return [] if tag_of(qfile) == "empty" else EXPECTED[fw]
+
+
+def missing_output(name: str, mode: str, secs: float, code: int) -> dict:
+    return {
+        "case": name,
+        "mode": mode,
+        "ran": 0,
+        "expected": -1,
+        "exact": False,
+        "pass": False,
+        "skipped_in_junit": -1,
+        "seconds": round(secs, 3),
+        "exit": code,
+        "expected_exit": 0,
+        "missing": ["<runner wrote no output>"],
+        "unexpected": [],
+    }
 
 
 # ----------------------------------------------------------------- hard-case probes
@@ -353,20 +434,20 @@ def overhead() -> dict:
     def e(mode: str) -> dict[str, str]:
         return {"FQ_QUARANTINE_FILE": qf, "FQ_QUARANTINE_MODE": mode}
 
+    # Timing uses its own 20-key list files, so it compares like with like against grep.
+    lst_only, lst_excl = cwd / "timing-list-only.txt", cwd / "timing-list-exclude.txt"
+    write_test_list(GEN / "quarantine.yaml", lst_only)
+    write_test_list(GEN / "quarantine.yaml", lst_excl)
     out["playwright"] = {
         "collect_plain": timing(lambda: pw(["--list"], {})),
         "collect_grep_exclude": timing(lambda: pw(["--list"], e("exclude"))),
         "collect_grep_only": timing(lambda: pw(["--list"], e("only"))),
-        "collect_testlist_only": timing(
-            lambda: pw(["--list", "--test-list", str(cwd / "list-only.txt")], {})
-        ),
+        "collect_testlist_only": timing(lambda: pw(["--list", "--test-list", str(lst_only)], {})),
         "run_all": timing(lambda: pw([], {})),
         "run_grep_exclude": timing(lambda: pw([], e("exclude"))),
         "run_grep_only": timing(lambda: pw([], e("only"))),
-        "run_testlist_exclude": timing(
-            lambda: pw(["--test-list-invert", str(cwd / "list-exclude.txt")], {})
-        ),
-        "run_testlist_only": timing(lambda: pw(["--test-list", str(cwd / "list-only.txt")], {})),
+        "run_testlist_exclude": timing(lambda: pw(["--test-list-invert", str(lst_excl)], {})),
+        "run_testlist_only": timing(lambda: pw(["--test-list", str(lst_only)], {})),
     }
     # jest (no collect-only mode: whole run)
     cwd = GEN / "jest"
@@ -421,6 +502,16 @@ def main() -> int:
         cases.append({**c, "case": "jest/register@300keys"})
         c = case_jest(mode, "name", "quarantine-300.yaml", ju)
         cases.append({**c, "case": "jest/name@300keys"})
+    # Empty list: exclude must run all 500, only must run nothing.
+    (GEN / "empty.yaml").write_text("version: 1\ntests:\n")
+    for mode in ("exclude", "only"):
+        cases.append({**case_pytest(mode, "empty.yaml"), "case": "pytest@empty"})
+        for variant in ("grep", "test-list"):
+            c = case_playwright(mode, variant, "empty.yaml")
+            cases.append({**c, "case": f"playwright/{variant}@empty"})
+        cases.append(
+            {**case_jest(mode, "register", "empty.yaml", ju), "case": "jest/register@empty"}
+        )
     results["playwright_gt"] = probe_playwright_gt()
     results["overhead_seconds_median_of_%d" % REPEATS] = overhead()
     (HERE / "results").mkdir(exist_ok=True)
@@ -428,9 +519,9 @@ def main() -> int:
         json.dumps(results, indent=2, ensure_ascii=False)
     )
     for c in cases:
-        flag = "OK " if c["exact"] and c["skipped_in_junit"] == 0 else "!! "
+        flag = "OK " if c["pass"] else "!! "
         print(
-            f"{flag}{c['case']:28} {c['mode']:8} ran={c['ran']:3} expected={c['expected']:3} skipped={c['skipped_in_junit']} t={c['seconds']}s exit={c.get('exit')}"
+            f"{flag}{c['case']:28} {c['mode']:8} ran={c['ran']:3} expected={c['expected']:3} skipped={c['skipped_in_junit']} t={c['seconds']}s exit={c['exit']}/{c['expected_exit']}"
             + ("" if c["exact"] else f"  missing={c['missing']} unexpected={c['unexpected']}")
         )
     print(json.dumps(results["playwright_gt"], indent=1))
