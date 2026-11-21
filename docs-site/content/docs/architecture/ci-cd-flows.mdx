@@ -38,15 +38,15 @@ sequenceDiagram
 
     Cli->>Cli: fq fetch-quarantine<br/>(quarantine.yaml from default branch)
     alt Fetch fails
-        Cli-->>Cli: Use checkout copy, warn in job summary
+        Cli-->>Cli: Use backend last-known-good list, warn in job summary<br/>(never the PR checkout's copy); fail the job if unavailable
     end
 
     Run->>Run: Run tests except quarantined, up to 2 reruns
     Run->>Rep: Each attempt's result
     Rep->>Rep: Write JUnit XML with fq.test_key,<br/>fq.attempt, fq.tags properties
 
-    Cli->>Cli: fq gate (failures minus quarantined list)
-    Note right of Cli: Decides green / red build,<br/>independent of the backend
+    Cli->>Cli: fq gate (failures minus the fetched quarantined list)
+    Note right of Cli: Decides green / red build; needs the backend<br/>only when the git fetch of the list failed
 
     Cli->>API: fq upload: POST /api/v1/ingest/runs<br/>(metadata + JUnit, Bearer repo token)
 
@@ -99,7 +99,7 @@ flowchart TD
   A[Checkout commit] --> B["Fetch quarantine.yaml from default branch<br/>git fetch origin main, git show origin/main:quarantine.yaml"]
   B --> B1{Fetch OK?}
   B1 -- Yes --> C[Use default-branch list]
-  B1 -- No --> C2[Fall back to checkout copy, warn in job summary]
+  B1 -- No --> C2["Use backend last-known-good list, warn in job summary; fail the job if unavailable"]
   C --> SPLIT
   C2 --> SPLIT
   SPLIT{{Two jobs in parallel}}
@@ -107,7 +107,7 @@ flowchart TD
   SPLIT --> J1[Blocking job: run all tests except quarantined, up to 2 reruns]
   J1 --> D{JUnit files found and test count > 0?}
   D -- No --> X[Fail: test runner crashed]
-  D -- Yes --> E["Quarantine gate (safety net):<br/>failed tests minus quarantined list"]
+  D -- Yes --> E["Quarantine gate (safety net):<br/>failed tests minus the fetched quarantined list"]
   E --> F{Any failures left?}
   F -- No --> G[Blocking job passes]
   F -- Yes --> H[Blocking job fails, lists failures]

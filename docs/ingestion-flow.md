@@ -27,15 +27,15 @@ sequenceDiagram
 
     Cli->>Cli: fq fetch-quarantine<br/>(quarantine.yaml from default branch)
     alt Fetch fails
-        Cli-->>Cli: Use checkout copy, warn in job summary
+        Cli-->>Cli: Use backend last-known-good list, warn in job summary<br/>(never the PR checkout's copy); fail the job if unavailable
     end
 
     Run->>Run: Run tests except quarantined, up to 2 reruns
     Run->>Rep: Each attempt's result
     Rep->>Rep: Write JUnit XML with fq.test_key,<br/>fq.attempt, fq.tags properties
 
-    Cli->>Cli: fq gate (failures minus quarantined list)
-    Note right of Cli: Decides green / red build,<br/>independent of the backend
+    Cli->>Cli: fq gate (failures minus the fetched quarantined list)
+    Note right of Cli: Decides green / red build; needs the backend<br/>only when the git fetch of the list failed
 
     Cli->>API: fq upload: POST /api/v1/ingest/runs<br/>(metadata + JUnit, Bearer repo token)
 
@@ -92,7 +92,7 @@ sequenceDiagram
 
 | Property | How it's guaranteed |
 |----------|---------------------|
-| CI never blocked by the backend | Gate runs locally from `quarantine.yaml`; upload errors only warn |
+| CI depends on the backend only as a fallback | The gate runs locally from the default-branch `quarantine.yaml` fetched with git (never the PR checkout's copy). Only if that fetch fails does `fq` read the backend's last-known-good list, and the job fails if both are unavailable. Upload errors only warn |
 | No duplicate data | Idempotency key on raw uploads; upserts on runs and tests |
 | No secrets stored | Masking before any write, raw upload included |
 | Safe parsing | `defusedxml`, size and decompression caps, parsing in the worker |
