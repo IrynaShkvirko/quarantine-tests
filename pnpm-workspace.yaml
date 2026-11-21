@@ -1,0 +1,4 @@
+packages:
+  - plugins/playwright-flaky-reporter
+  - plugins/jest-flaky-reporter
+  - ui

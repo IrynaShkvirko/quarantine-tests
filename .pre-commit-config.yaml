@@ -1,0 +1,38 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: detect-private-key
+  - repo: local
+    hooks:
+      # ruff runs from the uv env so pre-commit and `make lint` share the locked version
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: mypy
+        entry: uv run mypy backend plugins/pytest-flaky-reporter ci/fq-cli
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: prettier
+        name: prettier
+        entry: pnpm exec prettier --write --ignore-unknown
+        language: system
+        exclude: ^(docs-site|spikes|docs)/
+      - id: eslint
+        name: eslint
+        entry: pnpm exec eslint
+        language: system
+        files: \.(js|ts|tsx)$
+        exclude: ^(docs-site|spikes)/
