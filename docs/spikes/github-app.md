@@ -103,15 +103,26 @@ The check itself was also run locally under GNU grep (the runner's grep) against
 
 **Ruleset layout to require in user repos:** exactly the two rulesets above. A for review with the App as a `pull_request`-mode bypass actor; B for `fq-quarantine-check` pinned to GitHub Actions, with no bypass. Recommended for M3: set `allowed_merge_methods: ["squash"]` on ruleset A (not tested in the spike).
 
-**Spec changes this needs (not made; need agreement):**
+**Spec changes (agreed and made in `docs/architecture.md`, decision D39):**
 
-- §9.5: "Once the check passes, auto-merge proceeds" → "Once the check passes, the bot merges the PR through the REST API. GitHub auto-merge does not apply the App's ruleset bypass."
-- §9.5 (D29): add `checks: read` to the App's permissions and the `check_suite` webhook event. It is needed only to receive the trigger; the merge itself worked with a token scoped to `contents` + `pull_requests` write. Dropping it is possible if the sweep alone is accepted as the trigger, at the cost of merge latency.
-- §4.1 step 3.3: "with auto-merge turned on" → "marked for automatic merge by the bot".
+- §2: new decision D39. "Auto-merge" in the spec means the bot merges its own PR through the REST API; GitHub's native auto-merge is not used.
+- §9.5: the merge trigger (`check_suite` webhook plus sweep), the merge call pinned to the head SHA, `checks: read` added to the permissions (needed only to receive `check_suite` events), `workflows` never granted, and the two-ruleset layout.
+- §4.1 step 3.3, §8.1 (API table: `check_suite` on the GitHub webhook), the §7 component diagram and the §8.4 sequence diagram updated to match.
 
 ## Setup for a new repo
 
-Measured on `fq-sandbox`: about 3 minutes from the seed commit (20:52:02Z) to both rulesets active (20:54:51Z), including creating and installing the App. A second repo needs no new App, so it should take less. Not yet repeated on a second repo.
+**Measured:**
+
+- `fq-sandbox` (first repo, by hand): about 3 minutes from the seed commit to both rulesets active, including creating and installing the App.
+- `fq-sandbox-2` (second repo, `setup_repo.sh`): **5 min 38 s end to end**, from creating the repo to the App merging its smoke-test PR with no review (PR #1, check `SUCCESS`, merged by `app/fq-bot-dev-2`). 5 minutes of that was waiting for the one browser step (adding the repo to the App's installation). Everything else took 38 s.
+
+To set up another repo, run steps 1–6 with one command; it pauses for the browser step:
+
+```bash
+FQ_APP_ID=… FQ_APP_KEY_PATH=… FQ_INSTALLATION_ID=… spikes/github-app/setup_repo.sh OWNER/REPO
+```
+
+The steps it automates:
 
 1. **Repo:** public, or private on GitHub Pro / Team (rulesets on personal private repos need Pro). Squash merge allowed. "Allow auto-merge" is not needed.
 2. **Seed `main`** (before any ruleset exists): `.github/workflows/fq-quarantine-check.yml` from `spikes/github-app/workflow/` and a `quarantine.yaml`.
@@ -133,9 +144,9 @@ Measured on `fq-sandbox`: about 3 minutes from the seed commit (20:52:02Z) to bo
 
 - [x] Run the four scenarios on `fq-sandbox` and fill in the results table.
 - [x] Export both rulesets from the API and paste the JSON above.
-- [ ] Time the setup on a second repo (target: under 15 minutes). First repo: about 3 minutes.
+- [x] Time the setup on a second repo (target: under 15 minutes): `fq-sandbox-2`, 5 min 38 s with `setup_repo.sh`.
 - [x] Record the decision: App-driven merge. `fq_bot.py --merge` is the REST merge; the `check_suite` handler is M3-01 work (webhooks were disabled in the spike).
-- [ ] Agree the §9.5 / §4.1 changes above, including keeping `checks: read`.
+- [x] Agree the §9.5 / §4.1 changes above, including keeping `checks: read`: made in `docs/architecture.md` as D39.
 - [x] Scenario 4: `fq_bot.py --delete` opens a quarantine-only PR whose check fails.
 
 **Carry into M3-01 (the prototype is not production code):**
