@@ -1,0 +1,16 @@
+{
+  "repository": "acme/shop-web",
+  "ci_system": "github_actions",
+  "pipeline": "ci.yml/test-unit",
+  "run_id": "11893500",
+  "run_attempt": 1,
+  "shard": "1/2",
+  "job_kind": "blocking",
+  "commit_sha": "9f2c1e7",
+  "branch": "main",
+  "event": "push",
+  "environment": "ubuntu-22.04/node22",
+  "framework": "jest",
+  "started_at": "2026-11-19T21:00:03Z",
+  "finished_at": "2026-11-19T21:03:40Z"
+}

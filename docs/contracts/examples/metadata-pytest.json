@@ -1,0 +1,18 @@
+{
+  "repository": "acme/shop-api",
+  "ci_system": "github_actions",
+  "pipeline": "ci.yml/test-api",
+  "run_id": "11893422",
+  "run_attempt": 2,
+  "shard": "2/4",
+  "job_kind": "blocking",
+  "run_url": "https://github.com/acme/shop-api/actions/runs/11893422/attempts/2",
+  "commit_sha": "9f2c1e7",
+  "branch": "feature/ORD-88-refunds",
+  "event": "pull_request",
+  "environment": "ubuntu-22.04/py3.12",
+  "runner": "gh-hosted",
+  "framework": "pytest",
+  "started_at": "2026-11-19T21:00:03Z",
+  "finished_at": "2026-11-19T21:14:40Z"
+}

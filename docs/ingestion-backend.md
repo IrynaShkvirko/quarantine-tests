@@ -15,28 +15,29 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Q as Job queue
 
-    CI->>MW: POST /api/v1/ingest/runs<br/>(multipart: metadata + JUnit parts, Bearer repo token)
-    MW->>MW: request_id, rate limit per token
-    Note right of MW: 429 + Retry-After when over limit
+    CI->>MW: POST /api/v1/ingest/runs<br/>(multipart: metadata first, then JUnit parts, Bearer repo token)
+    MW->>MW: request_id, rate limit per token, per-IP limit on bad tokens
+    Note right of MW: 429 + Retry-After when over limit (before the body is read)
     MW->>Auth: next
 
     Auth->>Auth: sha256(token) lookup, hmac.compare_digest
-    Note right of Auth: request.state.repo = Repository
+    Note right of Auth: request.state.repo = Repository, else 401 + WWW-Authenticate
     Auth->>V: next
 
-    V->>V: Stream parts, enforce size limits
-    Note right of V: per part and total ≤ FQ_INGEST_MAX_UPLOAD_MB,<br/>gzip parts decompressed with a cap
+    V->>V: Read first part = metadata (≤ 64 KB, depth ≤ 2)
     V->>V: Metadata → pydantic (extra=forbid)
     Note right of V: metadata.repository must equal token's repo (403)
+    V->>V: Stream JUnit parts, enforce size limits
+    Note right of V: FQ_INGEST_MAX_PART_MB, FQ_INGEST_MAX_UPLOAD_MB,<br/>decompressed caps per part and total
     V->>M: next
 
-    M->>M: Mask secrets in failure messages and stack traces
-    Note right of M: masking_rules.yaml → [MASKED:type]
+    M->>M: defusedxml parse, mask decoded text and attributes, re-serialize
+    Note right of M: masking_rules.yaml → [MASKED:type]<br/>parse fails → nothing stored, upload failed
     M->>R: masked payload
 
-    R->>DB: INSERT raw_uploads ON CONFLICT (idempotency key) DO NOTHING
+    R->>DB: INSERT raw_uploads ON CONFLICT (idempotency key)<br/>DO UPDATE duplicate_mismatches when payload_sha256 differs<br/>RETURNING upload_id, inserted flag
     Note right of DB: key = repo, ci_system, run_id,<br/>run_attempt, shard, job_kind, framework
-    DB-->>R: upload_id (new or existing)
+    DB-->>R: first upload_id (new or existing)
     R->>Q: defer parse_upload(upload_id) if new
     R-->>CI: 202 { upload_id }
 ```
@@ -57,15 +58,16 @@ flowchart LR
 
 | Step | Cause | Status |
 |------|-------|--------|
-| Middleware | Too many requests for this repo token | 429 |
-| `require_repo_token` | Missing, malformed or unknown token | 401 |
+| Middleware | Too many requests for this repo token, or too many bad-token requests from this IP (trusted ingress hop) | 429 |
+| `require_repo_token` | Missing, malformed, unknown or revoked token | 401 with `WWW-Authenticate: Bearer` |
 | Validation | Metadata repository differs from the token's repository | 403 |
-| Validation | Part or total size over limit, or decompressed size over cap | 413 |
-| Validation | Metadata schema error, missing JUnit part, not XML / gzip | 400 |
-| Route | Same idempotency key already stored | 202 with the first `upload_id` |
+| Validation | Metadata, part or total size over limit, or decompressed size over cap | 413 |
+| Validation | Metadata not first, repeated, gzipped, too deep or schema error; missing JUnit part; too many parts; invalid gzip (malformed XML is not a 400; see below) | 400 |
+| Masking | JUnit part cannot be parsed for masking | 202, upload `failed`, nothing from the part stored |
+| Route | Same idempotency key already stored | 202 with the first `upload_id`; a different `payload_sha256` increments `duplicate_mismatches` and alerts |
 | Any | Unexpected error | 500, generic body, details in logs with `request_id` |
 
-Parsing errors (bad XML structure, XXE attempts) are found by the worker, not the route: the upload is marked `failed` and `GET /api/v1/ingest/runs/{upload_id}` shows the summary.
+Parsing errors (bad XML structure, XXE attempts) never give a 400: the masking parse or the worker marks the upload `failed` and `GET /api/v1/ingest/runs/{upload_id}` shows the summary.
 
 ## After the Response (worker)
 
@@ -92,10 +94,15 @@ erDiagram
 
     RAW_UPLOADS {
         bigint id PK
+        uuid upload_id UK "random, exposed in the API"
         bigint repository_id FK
         jsonb metadata "validated"
-        bytea payload "masked"
+        bytea payload "masked, null when failed before masking"
         text status "queued, parsed, failed"
+        text error_summary "set when failed"
+        text payload_sha256 "masked junit parts"
+        int duplicate_mismatches
+        timestamptz last_duplicate_mismatch_at
         timestamptz received_at
     }
     CI_RUNS {
