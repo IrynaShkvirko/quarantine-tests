@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="7" failures="1" errors="0" time="1.504">
+  <testsuite name="undefined" errors="0" failures="1" skipped="0" timestamp="2026-11-20T16:46:56" time="0.424" tests="7">
+    <testcase classname=" stable" name=" stable" time="0.009">
+    </testcase>
+    <testcase classname=" fails then passes" name=" fails then passes" time="0">
+    </testcase>
+    <testcase classname=" fails twice then passes" name=" fails twice then passes" time="0.001">
+    </testcase>
+    <testcase classname=" always fails" name=" always fails" time="0">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 2
+Received: 1
+    at Object.toBe (<repo>/spikes/rerun-attempts/jest/sample.test.js:20:13)
+    at Promise.finally.completed (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:1834:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:1774:10)
+    at _callCircusTest (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:1167:40)
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at _runTestInContext (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:1103:3)
+    at rerunTest (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:977:7)
+    at _runTestsForDescribeBlockOnce (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:1033:5)
+    at _runTestsForDescribeBlock (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:824:5)
+    at run (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:789:3)
+    at runAndTransformResultsToJestFormat (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/jestAdapterInit.js:2300:21)
+    at jestAdapter (<repo>/node_modules/.pnpm/jest-circus@30.5.2/node_modules/jest-circus/build/runner.js:111:19)
+    at runTestInternal (<repo>/node_modules/.pnpm/jest-runner@30.5.2/node_modules/jest-runner/build/index.js:247:16)
+    at runTest (<repo>/node_modules/.pnpm/jest-runner@30.5.2/node_modules/jest-runner/build/index.js:315:7)</failure>
+    </testcase>
+    <testcase classname=" param flaky [eu]" name=" param flaky [eu]" time="0">
+    </testcase>
+    <testcase classname=" param flaky [us]" name=" param flaky [us]" time="0">
+    </testcase>
+    <testcase classname="cart total discount applies discount" name="cart total discount applies discount" time="0.001">
+    </testcase>
+  </testsuite>
+</testsuites>

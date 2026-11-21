@@ -1,0 +1,106 @@
+<testsuites id="" name="" tests="7" failures="1" skipped="0" errors="0" time="5.812035">
+<testsuite name="sample.spec.ts" timestamp="2026-11-20T16:45:28.993Z" hostname="" tests="7" failures="1" skipped="0" time="0.285" errors="0">
+<testcase name="stable" classname="sample.spec.ts" time="0.004">
+</testcase>
+<testcase name="fails then passes" classname="sample.spec.ts" time="0.007">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/sample-fails-then-passes/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="fails twice then passes" classname="sample.spec.ts" time="0.097">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/sample-fails-twice-then-passes/error-context.md]]
+
+[[ATTACHMENT|test-results/sample-fails-twice-then-passes-retry1/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="always fails" classname="sample.spec.ts" time="0.055">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/sample-always-fails/error-context.md]]
+
+[[ATTACHMENT|test-results/sample-always-fails-retry1/error-context.md]]
+
+[[ATTACHMENT|test-results/sample-always-fails-retry2/error-context.md]]
+]]>
+</system-out>
+<failure message="always fails" type="expect.toBe">
+<![CDATA[  sample.spec.ts:15:1 › always fails ───────────────────────────────────────────────────────────────
+
+    Error: always fails
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      14 |
+      15 | test('always fails', () => {
+    > 16 |   expect(1, 'always fails').toBe(2);
+         |                             ^
+      17 | });
+      18 |
+      19 | for (const region of ['eu', 'us']) {
+        at <repo>/spikes/rerun-attempts/playwright/sample.spec.ts:16:29
+
+    Error Context: test-results/sample-always-fails/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: always fails
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      14 |
+      15 | test('always fails', () => {
+    > 16 |   expect(1, 'always fails').toBe(2);
+         |                             ^
+      17 | });
+      18 |
+      19 | for (const region of ['eu', 'us']) {
+        at <repo>/spikes/rerun-attempts/playwright/sample.spec.ts:16:29
+
+    Error Context: test-results/sample-always-fails-retry1/error-context.md
+
+    Retry #2 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: always fails
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      14 |
+      15 | test('always fails', () => {
+    > 16 |   expect(1, 'always fails').toBe(2);
+         |                             ^
+      17 | });
+      18 |
+      19 | for (const region of ['eu', 'us']) {
+        at <repo>/spikes/rerun-attempts/playwright/sample.spec.ts:16:29
+
+    Error Context: test-results/sample-always-fails-retry2/error-context.md
+]]>
+</failure>
+</testcase>
+<testcase name="param flaky [eu]" classname="sample.spec.ts" time="0.042">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/sample-param-flaky-eu-/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="param flaky [us]" classname="sample.spec.ts" time="0.074">
+</testcase>
+<testcase name="Checkout › saved card › pays" classname="sample.spec.ts" time="0.006">
+</testcase>
+</testsuite>
+</testsuites>
