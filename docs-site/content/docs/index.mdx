@@ -47,7 +47,7 @@ flowchart LR
 
 | Principle | What it means in practice |
 | --- | --- |
-| CI never waits for this system | Builds read the quarantine list from git; if the backend is down, builds still work |
+| CI never waits for this system | Builds read the quarantine list from the default branch in git; the backend is only a fallback when that fetch fails, and a build fails only if both are unavailable |
 | Evidence, not guesses | Only the same commit and environment count; infra failures and broken runs are excluded |
 | Nothing disappears | Quarantined tests keep running and stay on dashboards until fixed |
 | Every test has an owner | Owners come from CODEOWNERS; anything unmatched goes to an "unowned" queue |
