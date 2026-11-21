@@ -70,6 +70,7 @@ Scope: Portfolio/demo build, designed to scale to a real team's CI
 | D36 | Flips | Pass↔fail changes are counted only on the default branch (nightly runs included). Same-commit changes on PRs are already flaky evidence and are not double-counted |
 | D37 | Unclassified level | A test matching no level rule is `unclassified`: shown on dashboards, warned about by config sync and listed in the weekly digest, never rejected. Verified with 25 repetitions |
 | D38 | Cap floor | The cap counts active tests only (seen in the last 30 days) and always allows at least `team_cap_min_tests` (default 1) quarantined test: allowed = max(5% × active tests, 1) |
+| D39 | Bot PR merge | "Auto-merge" means the bot merges its own PR through the REST API once the required check passes. GitHub's native auto-merge is not used: it does not apply the App's ruleset bypass (spike M0-12, `docs/spikes/github-app.md`) |
 
 ---
 
@@ -165,7 +166,7 @@ If **more than 20%** of the tests in a run fail (applied only when the run has a
 3. Policy check, in order:
    1. **Protected?** (policy file or marker) → never quarantined. Create a high-priority Jira bug and send an immediate Slack alert. The test stays blocking.
    2. **Team over cap?** (quarantined tests + open shadow `auto_quarantine` decisions ≥ allowed, where allowed = max(`team_cap` × active tests, `team_cap_min_tests`) for that team in that repo; active = seen in the last `inventory_stale_days`; D38) → the bot opens a quarantine PR **without auto-merge**, labelled `needs-lead-approval`, with the lead as reviewer, and alerts the lead in Slack. If the lead merges, that's approval. If the PR is closed, the test goes back to Watching.
-   3. Otherwise → the bot opens a quarantine PR with **auto-merge** turned on, and a Jira ticket is created or reopened.
+   3. Otherwise → the bot opens a quarantine PR marked for **auto-merge** (the bot merges it once the required check passes, 9.5; D39), and a Jira ticket is created or reopened.
 
 The bot batches all decisions for a repo from one detection cycle into a single PR. In **shadow mode** (4.12), steps 3.1–3.3 are only recorded as "would have done X".
 
@@ -479,7 +480,7 @@ flowchart TB
     direction LR
     auth["Auth<br/>Repo tokens, webhook signatures,<br/>GitHub OAuth for future UI"]
     ingest["Ingestion router<br/>Validate, mask secrets, store raw upload,<br/>enqueue parse job"]
-    hooks["Webhook router<br/>GitHub PR / push events,<br/>Jira issue events"]
+    hooks["Webhook router<br/>GitHub PR / push / check_suite events,<br/>Jira issue events"]
     read["Read API<br/>Tests, history, quarantine, stats"]
   end
 
@@ -498,7 +499,7 @@ flowchart TB
     verify["Verification service<br/>Fix-merged check, per-level repetitions,<br/>probation"]
     subgraph integ["Integrations"]
       direction LR
-      ghc["GitHub client<br/>Bot PRs, auto-merge,<br/>CODEOWNERS fetch"]
+      ghc["GitHub client<br/>Bot PRs and merges,<br/>CODEOWNERS fetch"]
       jc["Jira client<br/>Create, reopen, link, comment"]
       sn["Slack notifier<br/>Channel posts, lead DMs, digest"]
     end
@@ -563,7 +564,7 @@ The domain layer has no I/O, so detection, policy and the state machine can be u
 | GET | `/api/v1/ingest/runs/{upload_id}` | Repo token | Processing status |
 | GET | `/api/v1/repos/{repo}/quarantine-plan` | Repo token | Nightly job plan: ordered tests, repetitions, shard assignment (9.3) |
 | GET | `/api/v1/repos/{repo}/quarantine` | Repo token | Last-known-good quarantine list (D11 fallback). `{repo}` is URL-encoded as one path segment (`acme%2Fshop-web`), as for `quarantine-plan`: the test keys from the default-branch `quarantine.yaml` as last synced by the backend (push webhook or `config_sync`), with the source commit SHA and sync time. Only the token's own repo (`403` otherwise). `fq fetch-quarantine` calls it only when the git fetch fails |
-| POST | `/api/v1/webhooks/github` | HMAC signature | `pull_request` closed/merged, `push` to default branch and config repo |
+| POST | `/api/v1/webhooks/github` | HMAC signature | `pull_request` closed/merged, `push` to default branch and config repo, `check_suite` completed on bot PRs (auto-merge trigger, 9.5) |
 | POST | `/api/v1/webhooks/jira` | Shared secret | `jira:issue_updated` (status, Flaky reason, Quarantine decision, labels) |
 | GET | `/api/v1/tests` | Service token (OAuth from M7) | Filter by repo, team, area, level, state |
 | GET | `/api/v1/tests/{id}/history` | Service token (OAuth from M7) | Executions by run and attempt, flaky occurrences, quarantine records |
@@ -705,7 +706,9 @@ sequenceDiagram
       QM->>J: Create Bug (label flaky_test, component, due date +4d, suggested reason)
       QM->>J: Link "relates to" previous ticket if any
     end
-    QM->>GH: Open or update batched PR adding tests, enable auto-merge
+    QM->>GH: Open or update batched PR adding tests, marked for auto-merge
+    QM->>GH: Sweep or check_suite webhook: check passed?
+    QM->>GH: Verify PR (bot author, head_sha, only quarantine.yaml), merge via REST at that SHA (D39)
     GH-->>QM: pull_request merged webhook
     QM->>QM: State Quarantined
     QM->>S: Post "new quarantine" to team channel
@@ -912,12 +915,25 @@ The required check on bot PRs:
 - rejects protected tests,
 - rejects entries with no Jira key.
 
-Once the check passes, auto-merge proceeds.
+Once the check passes, the bot merges the PR itself (D39):
+
+- **Trigger:** `fq-bot-merge-sweep` (every 5 minutes) checks open bot PRs with `auto_merge` set. A `check_suite` `completed` webhook, if GitHub delivers it to the App for Actions-created suites, only runs the same check sooner. Both paths are idempotent.
+- **Pre-merge verification (the bot's own, independent of CI):** the required check runs workflow code taken from the PR head, so anyone who can push to the PR branch could rewrite it. The bot therefore re-fetches the PR and merges only if **all** of these hold:
+  - the PR was opened by the App's bot account, from a branch in the same repo;
+  - the head SHA equals `bot_pull_requests.head_sha`, the commit the bot itself last pushed. Any other push, by a human or anything else, stops automatic merging; the PR then needs a human review like any other;
+  - `GET /pulls/{n}/files` lists exactly one file, `quarantine.yaml`, added or modified, as a regular file;
+  - `fq-quarantine-check` succeeded on that head SHA.
+- **Merge:** `PUT /repos/{repo}/pulls/{n}/merge`, squash, with `sha` set to that head SHA so a later push cannot be merged unchecked.
+- **Why not GitHub auto-merge:** it never applies the App's ruleset bypass, so the PR waits for a review forever (spike M0-12).
+- PRs without `auto_merge` (over cap, renames) are never merged by the bot; a human merges them.
+- **Stale base:** the check validated the merge with `main` as it was. If `main`'s `quarantine.yaml` changed since, the bot updates its branch (which records a new `head_sha`) and waits for the check again rather than merging.
 
 **Least privilege (D29):**
 
-- The GitHub App is installed only on the target repos, with `contents:write`, `pull_requests:write` and `metadata:read`.
-- A repository ruleset on the default branch lets the App bypass the required human review. The required status checks still apply, and the "only `quarantine.yaml`" check makes sure the bypass can't be used for any other file.
+- The GitHub App is installed only on the target repos, with `contents:write`, `pull_requests:write`, `metadata:read` and `checks:read` (to read check results and receive `check_suite` events). Webhook events: `pull_request`, `push`, `check_suite`. It never gets `workflows`, so the App itself can't edit the check that gates it. Installation tokens are scoped to one repo and to `contents` + `pull_requests` (+ `checks` for the sweep).
+- Two repository rulesets on the default branch. **`review`** requires one approving review, with the App as the only bypass actor in `pull_request` mode, so the App can skip review only when merging a PR, never by pushing directly. **`checks`** requires `fq-quarantine-check` from GitHub Actions and has no bypass for anyone. Setup steps and exported ruleset JSON: `docs/spikes/github-app.md`.
+- **What keeps the bypass limited to `quarantine.yaml`:** the bot's pre-merge verification above is the primary control. The required check is a second layer that also catches bot bugs, but it can't be the only control, because the workflow it runs comes from the PR. Recommended in M3-01 (to verify): a ruleset on `refs/heads/fq/**` that blocks updates by anyone except the App.
+- `contents:write` lets a leaked key push to any branch or tag that isn't protected. Target repos must protect release branches and tags with rulesets the App can't bypass; onboarding checks this.
 - The App's private key is in the cloud secret manager and rotated every 90 days.
 
 ---
@@ -1098,6 +1114,7 @@ erDiagram
     text url
     text kind "add, remove, rename, orphan_cleanup"
     boolean auto_merge
+    text head_sha "last commit the bot pushed; merge only at this SHA"
     text status "open, merged, closed"
     timestamptz merged_at
   }
@@ -1277,6 +1294,7 @@ Take a baseline in shadow mode, then compare after enforcing. This is how you sh
 | `fq-retention` | CronJob, daily | |
 | `fq-digest` | CronJob, Mon 09:00 Europe/Kyiv | |
 | `fq-config-sync` | CronJob every 15 min + config-repo push webhook | |
+| `fq-bot-merge-sweep` | CronJob every 5 min | Verifies and merges bot PRs marked `auto_merge` (9.5, D39); a `check_suite` webhook triggers the same check sooner |
 | `fq-migrate` | Job (Helm pre-upgrade hook) | Alembic migrations |
 | PostgreSQL | Managed (Cloud SQL / RDS) or CloudNativePG for the demo | Daily backups |
 | Grafana | Helm chart | GitHub OAuth, provisioned dashboards |

@@ -1,0 +1,27 @@
+name: fq-quarantine-check
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  fq-quarantine-check:
+    runs-on: ubuntu-latest
+    steps:
+      # Pin to a full commit SHA before M3-01 (project rule); tag used in the spike only.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Only a plain-file add/modify of quarantine.yaml may change
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # --no-renames and --raw expose status and mode, so deletes, renames and symlinks fail.
+          raw="$(git diff --no-renames --raw "origin/${BASE_REF}...HEAD")"
+          echo "$raw"
+          # [[:space:]] matches the tab; GNU grep -E does not understand \t.
+          expected_modes='^:100644 100644 [0-9a-f]+ [0-9a-f]+ M[[:space:]]quarantine\.yaml$|^:000000 100644 [0-9a-f]+ [0-9a-f]+ A[[:space:]]quarantine\.yaml$'
+          if [ "$(printf '%s\n' "$raw" | wc -l)" -ne 1 ] || ! printf '%s\n' "$raw" | grep -Eq "$expected_modes"; then
+            echo "::error::PR must modify or add exactly quarantine.yaml as a regular file"; exit 1
+          fi

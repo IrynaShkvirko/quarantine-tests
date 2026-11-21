@@ -34,6 +34,8 @@ test-results/
 
 # Scratch spikes (not part of any workspace, linter or test run)
 spikes/*
+# M0-12 deliverable: prototype script is the starting point for M3-01
+!spikes/github-app/
 # M0-11 deliverable: selection prototypes reused by M3-08, M5-01, M5-02
 !spikes/select-tests/
 # M0-10 deliverable: prototype reporters reused by M1-06, M5-01, M5-02
