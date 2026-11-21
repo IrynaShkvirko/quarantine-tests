@@ -41,18 +41,27 @@ sequenceDiagram
 
     activate API
     API->>API: Verify repo token (hashed, constant time)
+    alt Rate limited
+        API-->>Cli: 429 + Retry-After
+        Cli-->>Cli: Wait Retry-After, retry (counts toward the 3 retries)
+    end
     alt Invalid token
         API-->>Cli: 401
         Cli-->>Cli: Warn, keep JUnit as CI artifact,<br/>build result unchanged
     end
-    API->>API: Check sizes, decompressed size, metadata schema
+    API->>API: Read metadata (first part), schema, compare repository with token
+    alt Repository differs from token
+        API-->>Cli: 403
+        Cli-->>Cli: Warn, keep artifact, build unchanged
+    end
+    API->>API: Stream JUnit parts, check sizes and decompressed size
     alt Too large or invalid
         API-->>Cli: 413 / 400
         Cli-->>Cli: Warn, keep artifact, build unchanged
     end
-    API->>Mask: Masked copy of failure text
-    Mask-->>API: [MASKED:type] replacements
-    API->>DB: INSERT raw_uploads (idempotent on run, attempt, shard, job kind)
+    API->>Mask: Parse with defusedxml, mask decoded text
+    Mask-->>API: [MASKED:type] replacements<br/>(parse fails: upload failed, nothing stored)
+    API->>DB: INSERT raw_uploads (idempotent on repository, ci_system, run_id,<br/>run_attempt, shard, job_kind, framework)
     API->>Q: Defer parse_upload
     API-->>Cli: 202 { upload_id }
     deactivate API

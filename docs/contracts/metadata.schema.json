@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flaky-quarantine.example/contracts/metadata.schema.json",
+  "title": "Ingestion metadata",
+  "description": "The `metadata` part of POST /api/v1/ingest/runs (docs/architecture.md \u00a78.2). One upload per shard.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repository",
+    "ci_system",
+    "pipeline",
+    "run_id",
+    "run_attempt",
+    "shard",
+    "job_kind",
+    "commit_sha",
+    "branch",
+    "event",
+    "environment",
+    "framework",
+    "started_at",
+    "finished_at"
+  ],
+  "properties": {
+    "repository": {
+      "type": "string",
+      "pattern": "^(?!\\.{1,2}/)[A-Za-z0-9_.-]{1,100}/(?!\\.{1,2}$)[A-Za-z0-9_.-]{1,100}$",
+      "description": "owner/name",
+      "maxLength": 201
+    },
+    "ci_system": {
+      "enum": [
+        "github_actions",
+        "jenkins"
+      ]
+    },
+    "pipeline": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Workflow file and job, or Jenkins job path",
+      "maxLength": 255,
+      "pattern": "^[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+$"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "CI run id as a string (GitHub run_id, Jenkins build number)",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+    },
+    "run_attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "CI-level attempt (re-run jobs / replay), starts at 1",
+      "maximum": 1000
+    },
+    "shard": {
+      "type": "string",
+      "pattern": "^[1-9]\\d{0,3}/[1-9]\\d{0,3}$",
+      "description": "index/total, 1-based. Unsharded jobs send 1/1"
+    },
+    "job_kind": {
+      "enum": [
+        "blocking",
+        "quarantine",
+        "stress"
+      ]
+    },
+    "run_url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "pattern": "^https://\\S+$"
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{7,40}$"
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+$"
+    },
+    "event": {
+      "enum": [
+        "push",
+        "pull_request",
+        "nightly",
+        "quarantine",
+        "stress"
+      ]
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1,
+      "description": "e.g. ubuntu-22.04/py3.12 (\u00a73.3)",
+      "maxLength": 128,
+      "pattern": "^[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+$"
+    },
+    "runner": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+$"
+    },
+    "framework": {
+      "enum": [
+        "pytest",
+        "playwright",
+        "jest"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$"
+    }
+  }
+}

@@ -598,6 +598,35 @@ The domain layer has no I/O, so detection, policy and the state machine can be u
 - `event`: `push`, `pull_request`, `nightly`, `quarantine`, `stress`.
 - `job_kind`: `blocking`, `quarantine`, `stress`.
 
+**Ingestion responses and limits.** The wire contract is `docs/contracts/ingestion.md` (schema in `docs/contracts/metadata.schema.json`); this section summarizes it.
+
+| Status | Meaning |
+|--------|---------|
+| `202` | Accepted, or a repeat of an earlier upload's idempotency key (returns the first `upload_id`; differing content is counted and alerted) |
+| `400` | `metadata` not the first part, repeated, gzipped or invalid; no `junit` part; too many `junit` parts; invalid gzip |
+| `401` | Token authentication problem: missing, malformed or invalid (including revoked or rotated out) |
+| `403` | Valid token without permission, e.g. `metadata.repository` differs from the token's repository |
+| `413` | A part, the request or a decompressed size is over the limit |
+| `429` | Rate limited, with `Retry-After` |
+
+The token is checked before the body is read, and the `metadata` part (first, at most 64 KB) is validated and compared with the token's repository before any `junit` part is read. Malformed XML is not a `400`: the upload ends as `failed` on `GET /ingest/runs/{upload_id}`. `409` is never returned. `upload_id` is a random UUID, never the sequential row id.
+
+Default limits (configurable, proposed in M0-08 and to be confirmed against real uploads in M1-01):
+
+| Limit | Setting | Default |
+|-------|---------|---------|
+| `metadata` part | `FQ_INGEST_MAX_METADATA_KB` | 64 KB, JSON depth at most 2 |
+| One `junit` part, as sent | `FQ_INGEST_MAX_PART_MB` | 20 MB |
+| Whole request | `FQ_INGEST_MAX_UPLOAD_MB` | 50 MB |
+| One part decompressed | `FQ_INGEST_MAX_PART_DECOMPRESSED_MB` | 100 MB |
+| All parts decompressed | `FQ_INGEST_MAX_DECOMPRESSED_MB` | 200 MB |
+| `junit` parts per request | `FQ_INGEST_MAX_JUNIT_PARTS` | 20 |
+| `POST /ingest/runs` rate | per repo token | 120/min, burst 40 |
+| `GET /ingest/runs/{upload_id}` rate | per repo token | 60/min |
+| Failed authentication | per source IP (trusted ingress hop only); counts and refuses only bad-token requests | 10/min |
+
+A duplicate upload whose `payload_sha256` (SHA-256 over the masked, decompressed `junit` parts only, not the metadata) differs from the first is still answered `202`, but it increments `raw_uploads.duplicate_mismatches`, is logged and is alerted (section 12).
+
 ### 8.3 Sequence: CI run ingestion and detection
 
 ```mermaid
@@ -1083,10 +1112,15 @@ erDiagram
   }
   raw_uploads {
     bigint id PK
+    uuid upload_id UK "random, exposed in the API"
     bigint repository_id FK
     jsonb metadata
-    bytea payload "masked"
+    bytea payload "masked, null when failed before masking"
     text status "queued, parsed, failed"
+    text error_summary "set when failed"
+    text payload_sha256 "masked junit parts"
+    int duplicate_mismatches
+    timestamptz last_duplicate_mismatch_at
     timestamptz received_at
   }
   daily_test_stats {
@@ -1213,14 +1247,14 @@ Take a baseline in shadow mode, then compare after enforcing. This is how you sh
 
 - **Auth:** Grafana GitHub OAuth, restricted to the org; QA and dev teams get the Viewer role.
 - **Dashboards as code:** provisioned JSON in `grafana/provisioning/`.
-- **Alerting:** Grafana alerts only on system health (no ingestions for 26 hours, a growing parse-job backlog, the environmental run ratio). Workflow notifications go only through the backend's Slack notifier.
+- **Alerting:** Grafana alerts only on system health (no ingestions for 26 hours, a growing parse-job backlog, the environmental run ratio, any new `raw_uploads.duplicate_mismatches`, i.e. a duplicate ingestion upload whose content differs from the first, read through a `reporting` view). Workflow notifications go only through the backend's Slack notifier.
 
 ---
 
 ## 13. Security
 
-- **Secret masking during ingestion:** applied in the API **before** anything is stored, including raw uploads. Masked: GitHub tokens (`ghp_`, `github_pat_`), AWS keys (`AKIA...`), JWTs, `Authorization:` / `Bearer` values, `password=` / `token=` / `secret=` key-value pairs, private key blocks, email addresses, plus patterns in `masking_rules.yaml`. Replaced with `[MASKED:<type>]`. A unit-test corpus of real-looking stack traces guards the rules.
-- **Repo tokens:** one per repo, stored hashed, rotated through the admin CLI. Rate limits apply per token. They can only upload results and read their own repo's quarantine plan.
+- **Secret masking during ingestion:** applied in the API **before** anything is stored, including raw uploads. Masked: GitHub tokens (`ghp_`, `github_pat_`), AWS keys (`AKIA...`), JWTs, `Authorization:` / `Bearer` values, `password=` / `token=` / `secret=` key-value pairs, private key blocks, email addresses, plus patterns in `masking_rules.yaml`. Replaced with `[MASKED:<type>]`. Rules run on entity-decoded text: the API parses each JUnit part with `defusedxml` only to mask text and attribute values, and stores the re-serialized masked XML. If that parse fails, nothing from the part is stored and the upload is `failed` (fail closed). A unit-test corpus of real-looking stack traces, including XML-escaped forms (`&quot;`, `&#10;`), guards the rules.
+- **Repo tokens:** one per repo, stored hashed, rotated through the admin CLI. Rate limits apply per token (defaults in 8.2), and failed authentication is also throttled per source IP (taken from the trusted ingress hop; only bad-token requests are counted and refused, never a valid token). A valid token whose repository differs from `metadata.repository` gets `403`. They can only upload results and read their own repo's quarantine plan.
 - **Read API service token (D35):** one random secret (`secrets.token_urlsafe(32)`) in `FQ_READ_API_TOKEN`, stored in the secret manager, sent as `Authorization: Bearer <token>` and compared in constant time; missing or wrong → 401. Used by scripts, debugging and later the UI's backend; Grafana doesn't use it (it reads the database through `grafana_ro`). Rotated by replacing the secret and restarting the API. Replaced by GitHub OAuth when the UI arrives (M7).
 - **Webhooks:** HMAC signature check for GitHub; shared secret plus IP allowlist for Jira Cloud.
 - **GitHub App:** least privilege and a ruleset bypass limited to `quarantine.yaml` changes (9.5).

@@ -1,0 +1,88 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="pytest" tests="13">
+  <testcase classname="test_sample" name="test_stable" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_stable" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+  </testcase>
+  <testcase classname="test_sample" name="test_fails_then_passes" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_fails_then_passes" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+    <failure message="AssertionError: first attempt fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_fails_then_passes" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_fails_then_passes" />
+      <property name="fq.attempt" value="2" />
+    </properties>
+  </testcase>
+  <testcase classname="test_sample" name="test_fails_twice_then_passes" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_fails_twice_then_passes" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+    <failure message="AssertionError: attempt fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_fails_twice_then_passes" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_fails_twice_then_passes" />
+      <property name="fq.attempt" value="2" />
+    </properties>
+    <failure message="AssertionError: attempt fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_fails_twice_then_passes" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_fails_twice_then_passes" />
+      <property name="fq.attempt" value="3" />
+    </properties>
+  </testcase>
+  <testcase classname="test_sample" name="test_always_fails" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_always_fails" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+    <failure message="AssertionError: always fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_always_fails" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_always_fails" />
+      <property name="fq.attempt" value="2" />
+    </properties>
+    <failure message="AssertionError: always fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_always_fails" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_always_fails" />
+      <property name="fq.attempt" value="3" />
+    </properties>
+    <failure message="AssertionError: always fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_param_flaky[eu]" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_param_flaky[eu]" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+    <failure message="AssertionError: eu first attempt fails" />
+  </testcase>
+  <testcase classname="test_sample" name="test_param_flaky[eu]" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_param_flaky[eu]" />
+      <property name="fq.attempt" value="2" />
+    </properties>
+  </testcase>
+  <testcase classname="test_sample" name="test_param_flaky[us]" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::test_param_flaky[us]" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+  </testcase>
+  <testcase classname="test_sample.TestNested" name="test_in_class" file="test_sample.py" time="0.000">
+    <properties>
+      <property name="fq.test_key" value="pytest::test_sample.py::TestNested::test_in_class" />
+      <property name="fq.attempt" value="1" />
+    </properties>
+  </testcase>
+</testsuite>

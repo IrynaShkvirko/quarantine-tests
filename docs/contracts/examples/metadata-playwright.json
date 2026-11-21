@@ -1,0 +1,16 @@
+{
+  "repository": "acme/shop-web",
+  "ci_system": "jenkins",
+  "pipeline": "shop-web/main/e2e",
+  "run_id": "412",
+  "run_attempt": 1,
+  "shard": "1/1",
+  "job_kind": "quarantine",
+  "commit_sha": "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567",
+  "branch": "main",
+  "event": "nightly",
+  "environment": "ubuntu-22.04/chromium",
+  "framework": "playwright",
+  "started_at": "2026-11-20T01:00:00+00:00",
+  "finished_at": "2026-11-20T01:22:10+00:00"
+}
