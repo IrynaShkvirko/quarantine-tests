@@ -3,3 +3,42 @@
 
 # personal agent notes (see CLAUDE.md)
 CLAUDE.local.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Coverage and reports
+.coverage
+coverage/
+htmlcov/
+coverage.xml
+playwright-report/
+test-results/
+
+# Scratch spikes (not part of any workspace, linter or test run)
+spikes/*
+
+# Private keys never belong in the repo
+*.pem
+*.key
+.secrets/
+
+# Serena local state
+.serena/

@@ -1,0 +1,15 @@
+# Every top-level folder has an owner. QA owns the quarantine policy example.
+/backend/        @IrynaShkvirko
+/plugins/        @IrynaShkvirko
+/ci/             @IrynaShkvirko
+/.github/        @IrynaShkvirko
+/grafana/        @IrynaShkvirko
+/deploy/         @IrynaShkvirko
+/config-example/ @IrynaShkvirko
+/demo/           @IrynaShkvirko
+/ui/             @IrynaShkvirko
+/docs/           @IrynaShkvirko
+/docs-site/      @IrynaShkvirko
+/scripts/        @IrynaShkvirko
+/.claude/        @IrynaShkvirko
+/config-example/quarantine-policy.yaml @IrynaShkvirko

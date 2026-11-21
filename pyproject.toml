@@ -1,0 +1,50 @@
+[project]
+name = "flaky-quarantine"
+version = "0.0.0"
+description = "Flaky Test Quarantine workspace root"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest>=9.2",
+  "pytest-asyncio>=1.5",
+  "pytest-cov>=7.1",
+  "pytest-randomly>=5.1",
+  "pytest-repeat>=0.9.4",
+  "hypothesis>=6.170",
+  "ruff>=0.17.6",
+  "mypy>=2.4",
+  "pre-commit>=4.7",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["backend", "plugins/pytest-flaky-reporter", "ci/fq-cli"]
+exclude = ["spikes"]
+
+[tool.uv.sources]
+fq-backend = { workspace = true }
+pytest-flaky-reporter = { workspace = true }
+fq-cli = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["spikes", "docs-site", "node_modules", ".claude", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "fq_cli", "pytest_flaky_reporter"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "plugins/pytest-flaky-reporter/tests", "ci/fq-cli/tests"]
+norecursedirs = ["spikes", "node_modules", ".venv", "docs-site"]
+markers = ["integration: needs `make up` (Postgres)"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-m 'not integration'"

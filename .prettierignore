@@ -1,0 +1,11 @@
+node_modules
+docs-site
+spikes
+docs
+.venv
+uv.lock
+pnpm-lock.yaml
+coverage
+.claude
+.serena
+*.md

@@ -1338,4 +1338,3 @@ Proposed, not scheduled. Each has a design document; none changes the decisions 
 | Improvement | Earliest | Design | Summary |
 |-------------|----------|--------|---------|
 | AI failure triage | After M4 | `docs/feature-requirements/2026-11-20-ai-failure-triage-design.md` | For candidates the regex rules leave `untriaged` (or match with low confidence), send masked failing/passing attempts, test source and recent diffs to an LLM, compressed in-process with Headroom (`headroom-ai`, offline library mode), and add a suggested reason, root cause and fix to the Jira ticket and dashboards. Advisory only: never changes state or the confirmed reason. Adds an LLM provider trust boundary to §13, a token budget, and an `ai_triage_results` table |
-
