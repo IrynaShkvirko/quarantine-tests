@@ -6,7 +6,10 @@
 
 Usage (key stays outside the repo):
   FQ_APP_ID=123 FQ_APP_KEY_PATH=~/.secrets/fq-bot-dev.pem \
-  uv run spikes/github-app/fq_bot.py --repo OWNER/fq-sandbox [--also-readme]
+  uv run spikes/github-app/fq_bot.py --repo OWNER/fq-sandbox [--also-readme | --delete] [--no-auto-merge]
+  uv run spikes/github-app/fq_bot.py --repo OWNER/fq-sandbox --merge PR   # App-driven merge (the decision)
+
+Native auto-merge is kept for reproducing scenario 1: it does NOT apply the App's ruleset bypass.
 """
 import argparse
 import base64
@@ -53,14 +56,45 @@ def put_file(c: httpx.Client, repo: str, path: str, branch: str, content: str) -
     c.put(f"/repos/{repo}/contents/{path}", json=body).raise_for_status()
 
 
+def delete_file(c: httpx.Client, repo: str, path: str, branch: str) -> None:
+    existing = c.get(f"/repos/{repo}/contents/{path}", params={"ref": branch})
+    existing.raise_for_status()
+    body = {"message": f"chore: delete {path}", "branch": branch, "sha": existing.json()["sha"]}
+    c.request("DELETE", f"/repos/{repo}/contents/{path}", json=body).raise_for_status()
+
+
+def merge(repo: str, number: int) -> None:
+    """App-driven merge. In M3 this runs on a check_suite webhook; here it is called by hand.
+
+    The merge is pinned to the head SHA the check ran on, so a push after the check can't slip in.
+    """
+    token = installation_token(repo, app_jwt(os.environ["FQ_APP_ID"], os.environ["FQ_APP_KEY_PATH"]))
+    with httpx.Client(base_url=API, headers=headers(token), timeout=TIMEOUT) as c:
+        pr = c.get(f"/repos/{repo}/pulls/{number}")
+        pr.raise_for_status()
+        r = c.put(f"/repos/{repo}/pulls/{number}/merge",
+                  json={"merge_method": "squash", "sha": pr.json()["head"]["sha"]})
+        print(f"merge #{number}: HTTP {r.status_code} {r.json().get('message')}")
+        if r.status_code != 200:
+            raise SystemExit(1)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--also-readme", action="store_true", help="scenario 2: touch README.md too")
+    ap.add_argument("--delete", action="store_true",
+                    help="scenario 4: delete quarantine.yaml so the check fails on a quarantine-only PR")
+    ap.add_argument("--merge", type=int, metavar="PR",
+                    help="fallback: the App squash-merges PR itself (ruleset B still enforces the check)")
     ap.add_argument("--no-auto-merge", action="store_true", help="skip enablePullRequestAutoMerge")
     args = ap.parse_args()
     if not re.fullmatch(r"[\w.-]+/[\w.-]+", args.repo):
         raise SystemExit("--repo must look like OWNER/NAME")
+
+    if args.merge:
+        merge(args.repo, args.merge)
+        return
 
     token = installation_token(args.repo, app_jwt(os.environ["FQ_APP_ID"], os.environ["FQ_APP_KEY_PATH"]))
     with httpx.Client(base_url=API, headers=headers(token), timeout=TIMEOUT) as c:
@@ -73,7 +107,10 @@ def main() -> None:
         branch = f"fq/quarantine-{int(time.time())}"
         c.post(f"/repos/{args.repo}/git/refs", json={"ref": f"refs/heads/{branch}", "sha": sha}).raise_for_status()
 
-        put_file(c, args.repo, "quarantine.yaml", branch, f"# updated {branch}\ntests: []\n")
+        if args.delete:
+            delete_file(c, args.repo, "quarantine.yaml", branch)
+        else:  # sandbox only: overwrites the whole file
+            put_file(c, args.repo, "quarantine.yaml", branch, f"# updated {branch}\ntests: []\n")
         if args.also_readme:
             put_file(c, args.repo, "README.md", branch, f"# fq-sandbox\n{branch}\n")
 
