@@ -1,0 +1,12 @@
+{
+  "name": "fq-spike-select-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "M0-11 spike: select tests by ID. Throwaway prototypes reused by M3-08, M5-01, M5-02.",
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "jest": "30.5.2",
+    "jest-junit": "16.0.0",
+    "yaml": "2.8.1"
+  }
+}

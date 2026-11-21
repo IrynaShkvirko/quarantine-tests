@@ -42,7 +42,7 @@ Scope: Portfolio/demo build, designed to scale to a real team's CI
 | D8 | Protected tests | Policy file per repo is the source of truth; test markers are a second layer |
 | D9 | Cap | At most 5% of a team's tests per repo can be quarantined. Above that, auto-quarantine stops, the lead is alerted, and a human decides. In shadow mode, open "would auto-quarantine" decisions count toward the cap, so shadow numbers match what enforce mode would do |
 | D10 | Pipelines | Quarantined tests run in a **separate non-blocking job**. The quarantine gate on the blocking job stays as a safety net |
-| D11 | Quarantine list | CI reads `quarantine.yaml` from the **default branch**, and falls back to the checkout's copy if the fetch fails |
+| D11 | Quarantine list | CI reads `quarantine.yaml` from the **default branch**, and never reads the PR checkout's copy (PR-controlled). If the fetch fails, it uses the backend's last-known-good list (`GET /api/v1/repos/{repo}/quarantine`, 8.1), and fails the job if that is unavailable too. Test selection and the quarantine gate use the same fetched list |
 | D12 | Exit | Jira Done **and** a commit/PR referencing the ticket merged to the default branch → verification (unit/API 50×, integration 25×, e2e 10×) → release → **7-day probation** on `main` |
 | D13 | SLA | Due date is 4 days after the ticket is created. When overdue, the team lead gets a Slack message |
 | D14 | Max age | After 30 days in quarantine, a forced decision is required: fix, rewrite or delete. Decisions are tracked in the digest |
@@ -181,7 +181,7 @@ Reasons: `timing`, `order_dependency`, `concurrency`, `external_dependency`, `te
 
 - **Blocking job:** runs all tests **except** those listed in the default-branch `quarantine.yaml`.
 - **Quarantine job (non-blocking):** runs only the quarantined tests, in a separate process/runner. This keeps any state leakage from a broken test away from healthy tests.
-- **Safety net:** the quarantine gate on the blocking job still treats failures of quarantined tests as non-blocking. This covers cases where exclusion misses a test (ID mismatch, fetch fell back to an older list, or a test quarantined while the run was in progress).
+- **Safety net:** the quarantine gate on the blocking job still treats failures of quarantined tests as non-blocking. The gate uses the same fetched list as test selection (D11), never the working-tree `quarantine.yaml`, so a PR can't make its own failures non-blocking by editing that file. This covers cases where exclusion misses a test (ID mismatch, fetch fell back to the backend's last-known-good list, or a test quarantined while the run was in progress).
 
 ### 4.4 Exit from quarantine
 
@@ -562,6 +562,7 @@ The domain layer has no I/O, so detection, policy and the state machine can be u
 | POST | `/api/v1/ingest/runs` | Repo bearer token | Upload JUnit files + run metadata (multipart, one call per shard). Returns `202` with an `upload_id` |
 | GET | `/api/v1/ingest/runs/{upload_id}` | Repo token | Processing status |
 | GET | `/api/v1/repos/{repo}/quarantine-plan` | Repo token | Nightly job plan: ordered tests, repetitions, shard assignment (9.3) |
+| GET | `/api/v1/repos/{repo}/quarantine` | Repo token | Last-known-good quarantine list (D11 fallback): the test keys from the default-branch `quarantine.yaml` as last synced by the backend (push webhook or `config_sync`), with the source commit SHA and sync time. Only the token's own repo (`403` otherwise). `fq fetch-quarantine` calls it only when the git fetch fails |
 | POST | `/api/v1/webhooks/github` | HMAC signature | `pull_request` closed/merged, `push` to default branch and config repo |
 | POST | `/api/v1/webhooks/jira` | Shared secret | `jira:issue_updated` (status, Flaky reason, Quarantine decision, labels) |
 | GET | `/api/v1/tests` | Service token (OAuth from M7) | Filter by repo, team, area, level, state |
@@ -810,7 +811,7 @@ flowchart TD
   A[Checkout commit] --> B["Fetch quarantine.yaml from default branch<br/>git fetch origin main, git show origin/main:quarantine.yaml"]
   B --> B1{Fetch OK?}
   B1 -- Yes --> C[Use default-branch list]
-  B1 -- No --> C2[Fall back to checkout copy, warn in job summary]
+  B1 -- No --> C2["Use backend last-known-good list, warn in job summary; fail the job if unavailable"]
   C --> SPLIT
   C2 --> SPLIT
   SPLIT{{Two jobs in parallel}}
@@ -818,7 +819,7 @@ flowchart TD
   SPLIT --> J1[Blocking job: run all tests except quarantined, up to 2 reruns]
   J1 --> D{JUnit files found and test count > 0?}
   D -- No --> X[Fail: test runner crashed]
-  D -- Yes --> E["Quarantine gate (safety net):<br/>failed tests minus quarantined list"]
+  D -- Yes --> E["Quarantine gate (safety net):<br/>failed tests minus the fetched quarantined list"]
   E --> F{Any failures left?}
   F -- No --> G[Blocking job passes]
   F -- Yes --> H[Blocking job fails, lists failures]
@@ -1254,11 +1255,11 @@ Take a baseline in shadow mode, then compare after enforcing. This is how you sh
 ## 13. Security
 
 - **Secret masking during ingestion:** applied in the API **before** anything is stored, including raw uploads. Masked: GitHub tokens (`ghp_`, `github_pat_`), AWS keys (`AKIA...`), JWTs, `Authorization:` / `Bearer` values, `password=` / `token=` / `secret=` key-value pairs, private key blocks, email addresses, plus patterns in `masking_rules.yaml`. Replaced with `[MASKED:<type>]`. Rules run on entity-decoded text: the API parses each JUnit part with `defusedxml` only to mask text and attribute values, and stores the re-serialized masked XML. If that parse fails, nothing from the part is stored and the upload is `failed` (fail closed). A unit-test corpus of real-looking stack traces, including XML-escaped forms (`&quot;`, `&#10;`), guards the rules.
-- **Repo tokens:** one per repo, stored hashed, rotated through the admin CLI. Rate limits apply per token (defaults in 8.2), and failed authentication is also throttled per source IP (taken from the trusted ingress hop; only bad-token requests are counted and refused, never a valid token). A valid token whose repository differs from `metadata.repository` gets `403`. They can only upload results and read their own repo's quarantine plan.
+- **Repo tokens:** one per repo, stored hashed, rotated through the admin CLI. Rate limits apply per token (defaults in 8.2), and failed authentication is also throttled per source IP (taken from the trusted ingress hop; only bad-token requests are counted and refused, never a valid token). A valid token whose repository differs from `metadata.repository` gets `403`. They can only upload results and read their own repo's quarantine plan and last-known-good quarantine list.
 - **Read API service token (D35):** one random secret (`secrets.token_urlsafe(32)`) in `FQ_READ_API_TOKEN`, stored in the secret manager, sent as `Authorization: Bearer <token>` and compared in constant time; missing or wrong → 401. Used by scripts, debugging and later the UI's backend; Grafana doesn't use it (it reads the database through `grafana_ro`). Rotated by replacing the secret and restarting the API. Replaced by GitHub OAuth when the UI arrives (M7).
 - **Webhooks:** HMAC signature check for GitHub; shared secret plus IP allowlist for Jira Cloud.
 - **GitHub App:** least privilege and a ruleset bypass limited to `quarantine.yaml` changes (9.5).
-- **Ingress:** only `/api/v1/ingest/*`, `/api/v1/webhooks/*` and `/api/v1/repos/*/quarantine-plan` are public. The read API (`/api/v1/tests`, `/stats`, `/quarantine`) is reachable only inside the cluster, and still requires the service token. Grafana sits behind OAuth.
+- **Ingress:** only `/api/v1/ingest/*`, `/api/v1/webhooks/*`, `/api/v1/repos/*/quarantine-plan` and `/api/v1/repos/*/quarantine` are public. The read API (`/api/v1/tests`, `/stats`, `/quarantine`) is reachable only inside the cluster, and still requires the service token. Grafana sits behind OAuth.
 
 ---
 
