@@ -1,0 +1,4 @@
+node_modules/
+native.xml
+native-testcase-results.json
+fq.xml

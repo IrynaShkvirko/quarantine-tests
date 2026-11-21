@@ -1,0 +1,5 @@
+node_modules/
+test-results/
+native.xml
+native.json
+fq.xml
