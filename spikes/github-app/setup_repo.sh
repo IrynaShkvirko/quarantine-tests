@@ -16,6 +16,7 @@ start=$(date +%s)
 step() { printf '[%3ss] %s\n' "$(( $(date +%s) - start ))" "$*"; }
 
 # 1. Repo: public, because rulesets on personal private repos need GitHub Pro.
+#    A public sandbox must never run the automatic merge path: forks can open PRs.
 if ! gh repo view "$repo" >/dev/null 2>&1; then
   gh repo create "$repo" --public --description "fq bot sandbox" >/dev/null
 fi
@@ -55,7 +56,9 @@ gh api "repos/$repo/rulesets" -q '.[].name' | grep -qx review || { echo "ruleset
 step "ruleset 'review' active (App bypass)"
 
 # 5. Smoke test: bot PR -> check passes -> App merges with no review.
-pr="$(uv run -q "$here/fq_bot.py" --repo "$repo" --no-auto-merge | sed -n 's#.*/pull/##p')"
+out="$(uv run -q "$here/fq_bot.py" --repo "$repo" --no-auto-merge)"
+pr="$(printf '%s\n' "$out" | sed -n 's#.*/pull/##p')"
+head="$(printf '%s\n' "$out" | sed -n 's/^head: //p')"
 step "bot PR #$pr opened"
 for _ in $(seq 1 60); do
   state="$(gh pr view "$pr" -R "$repo" --json statusCheckRollup -q '[.statusCheckRollup[].conclusion] | join(",")')"
@@ -63,5 +66,5 @@ for _ in $(seq 1 60); do
   sleep 5
 done
 [[ "$state" == "SUCCESS" ]] || { echo "check did not pass: '$state'" >&2; exit 1; }
-uv run -q "$here/fq_bot.py" --repo "$repo" --merge "$pr"
+uv run -q "$here/fq_bot.py" --repo "$repo" --merge "$pr" --expect-sha "$head"
 step "done: PR #$pr merged by the App. Total $(( $(date +%s) - start ))s"

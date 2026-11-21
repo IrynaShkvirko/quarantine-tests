@@ -480,7 +480,7 @@ flowchart TB
     direction LR
     auth["Auth<br/>Repo tokens, webhook signatures,<br/>GitHub OAuth for future UI"]
     ingest["Ingestion router<br/>Validate, mask secrets, store raw upload,<br/>enqueue parse job"]
-    hooks["Webhook router<br/>GitHub PR / push events,<br/>Jira issue events"]
+    hooks["Webhook router<br/>GitHub PR / push / check_suite events,<br/>Jira issue events"]
     read["Read API<br/>Tests, history, quarantine, stats"]
   end
 
@@ -707,8 +707,8 @@ sequenceDiagram
       QM->>J: Link "relates to" previous ticket if any
     end
     QM->>GH: Open or update batched PR adding tests, marked for auto-merge
-    GH-->>QM: check_suite completed webhook (required check passed)
-    QM->>GH: Merge PR via REST, pinned to the checked head SHA (D39)
+    QM->>GH: Sweep or check_suite webhook: check passed?
+    QM->>GH: Verify PR (bot author, head_sha, only quarantine.yaml), merge via REST at that SHA (D39)
     GH-->>QM: pull_request merged webhook
     QM->>QM: State Quarantined
     QM->>S: Post "new quarantine" to team channel
@@ -917,15 +917,23 @@ The required check on bot PRs:
 
 Once the check passes, the bot merges the PR itself (D39):
 
-- **Trigger:** the `check_suite` `completed` webhook for a bot PR, plus a periodic sweep of open bot PRs for missed webhooks. Both are idempotent: merge only an open PR with `auto_merge` set whose head SHA is the one that passed.
+- **Trigger:** `fq-bot-merge-sweep` (every 5 minutes) checks open bot PRs with `auto_merge` set. A `check_suite` `completed` webhook, if GitHub delivers it to the App for Actions-created suites, only runs the same check sooner. Both paths are idempotent.
+- **Pre-merge verification (the bot's own, independent of CI):** the required check runs workflow code taken from the PR head, so anyone who can push to the PR branch could rewrite it. The bot therefore re-fetches the PR and merges only if **all** of these hold:
+  - the PR was opened by the App's bot account, from a branch in the same repo;
+  - the head SHA equals `bot_pull_requests.head_sha`, the commit the bot itself last pushed. Any other push, by a human or anything else, stops automatic merging; the PR then needs a human review like any other;
+  - `GET /pulls/{n}/files` lists exactly one file, `quarantine.yaml`, added or modified, as a regular file;
+  - `fq-quarantine-check` succeeded on that head SHA.
 - **Merge:** `PUT /repos/{repo}/pulls/{n}/merge`, squash, with `sha` set to that head SHA so a later push cannot be merged unchecked.
 - **Why not GitHub auto-merge:** it never applies the App's ruleset bypass, so the PR waits for a review forever (spike M0-12).
 - PRs without `auto_merge` (over cap, renames) are never merged by the bot; a human merges them.
+- **Stale base:** the check validated the merge with `main` as it was. If `main`'s `quarantine.yaml` changed since, the bot updates its branch (which records a new `head_sha`) and waits for the check again rather than merging.
 
 **Least privilege (D29):**
 
-- The GitHub App is installed only on the target repos, with `contents:write`, `pull_requests:write`, `metadata:read` and `checks:read` (only to receive `check_suite` events). It never gets `workflows`, so it can't edit the check that gates it. Installation tokens are scoped to one repo and to `contents` + `pull_requests`.
-- Two repository rulesets on the default branch. **`review`** requires one approving review, with the App as the only bypass actor in `pull_request` mode, so the App can skip review only when merging a PR, never by pushing directly. **`checks`** requires `fq-quarantine-check` from GitHub Actions and has no bypass for anyone. The "only `quarantine.yaml`" check makes sure the bypass can't be used for any other file. Setup steps and exported ruleset JSON: `docs/spikes/github-app.md`.
+- The GitHub App is installed only on the target repos, with `contents:write`, `pull_requests:write`, `metadata:read` and `checks:read` (to read check results and receive `check_suite` events). Webhook events: `pull_request`, `push`, `check_suite`. It never gets `workflows`, so the App itself can't edit the check that gates it. Installation tokens are scoped to one repo and to `contents` + `pull_requests` (+ `checks` for the sweep).
+- Two repository rulesets on the default branch. **`review`** requires one approving review, with the App as the only bypass actor in `pull_request` mode, so the App can skip review only when merging a PR, never by pushing directly. **`checks`** requires `fq-quarantine-check` from GitHub Actions and has no bypass for anyone. Setup steps and exported ruleset JSON: `docs/spikes/github-app.md`.
+- **What keeps the bypass limited to `quarantine.yaml`:** the bot's pre-merge verification above is the primary control. The required check is a second layer that also catches bot bugs, but it can't be the only control, because the workflow it runs comes from the PR. Recommended in M3-01 (to verify): a ruleset on `refs/heads/fq/**` that blocks updates by anyone except the App.
+- `contents:write` lets a leaked key push to any branch or tag that isn't protected. Target repos must protect release branches and tags with rulesets the App can't bypass; onboarding checks this.
 - The App's private key is in the cloud secret manager and rotated every 90 days.
 
 ---
@@ -1106,6 +1114,7 @@ erDiagram
     text url
     text kind "add, remove, rename, orphan_cleanup"
     boolean auto_merge
+    text head_sha "last commit the bot pushed; merge only at this SHA"
     text status "open, merged, closed"
     timestamptz merged_at
   }
@@ -1285,6 +1294,7 @@ Take a baseline in shadow mode, then compare after enforcing. This is how you sh
 | `fq-retention` | CronJob, daily | |
 | `fq-digest` | CronJob, Mon 09:00 Europe/Kyiv | |
 | `fq-config-sync` | CronJob every 15 min + config-repo push webhook | |
+| `fq-bot-merge-sweep` | CronJob every 5 min | Verifies and merges bot PRs marked `auto_merge` (9.5, D39); a `check_suite` webhook triggers the same check sooner |
 | `fq-migrate` | Job (Helm pre-upgrade hook) | Alembic migrations |
 | PostgreSQL | Managed (Cloud SQL / RDS) or CloudNativePG for the demo | Daily backups |
 | Grafana | Helm chart | GitHub OAuth, provisioned dashboards |

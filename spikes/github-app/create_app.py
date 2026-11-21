@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 PERMISSIONS = {"contents": "write", "pull_requests": "write", "metadata": "read", "checks": "read"}
-EVENTS = ["pull_request", "push"]
+EVENTS = ["pull_request", "push", "check_suite"]
 
 
 def manifest(name: str, port: int) -> dict[str, object]:
@@ -65,6 +65,10 @@ def main() -> None:
             self.wfile.write(text.encode())
 
         def do_GET(self) -> None:
+            # Reject DNS-rebinding requests: only our own origin may read the state.
+            if self.headers.get("Host") not in (f"localhost:{args.port}", f"127.0.0.1:{args.port}"):
+                self.send_error(403)
+                return
             url = urlparse(self.path)
             if url.path == "/":
                 self.reply(
@@ -81,7 +85,9 @@ def main() -> None:
             app = convert(q["code"][0])
             key = Path.home() / ".secrets" / f"{app['slug']}.pem"
             key.parent.mkdir(mode=0o700, exist_ok=True)
+            key.parent.chmod(0o700)
             fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.fchmod(fd, 0o600)  # the mode argument is ignored when the file already exists
             with os.fdopen(fd, "w") as f:
                 f.write(str(app["pem"]))
             done.update(id=app["id"], slug=app["slug"], key=str(key))

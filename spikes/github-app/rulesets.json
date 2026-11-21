@@ -1,5 +1,5 @@
 {
-  "_comment": "Templates. Replace bypass actor_id 0 with the numeric App id. Replace with the API export once the spike is run (gh api repos/OWNER/fq-sandbox/rulesets/ID).",
+  "_comment": "Templates used by setup_repo.sh. Replace bypass actor_id 0 with the numeric App id. The API export of the live rulesets is in docs/spikes/github-app.md.",
   "review": {
     "name": "review", "target": "branch", "enforcement": "active",
     "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},

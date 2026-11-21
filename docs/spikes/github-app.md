@@ -1,10 +1,10 @@
 # Spike M0-12: GitHub App auto-merge with ruleset bypass
 
-**Status: run on 2026-11-21 against `IrynaShkvirko/fq-sandbox`.** Spec: `docs/architecture.md` §4.1, §9.5, §13.
+**Status: run on 2026-11-21 against `IrynaShkvirko/fq-sandbox` and `IrynaShkvirko/fq-sandbox-2`.** Spec: `docs/architecture.md` §4.1, §9.5, §13.
 
 **Question.** Can a GitHub App open a PR that changes only `quarantine.yaml` and have it auto-merge once `fq-quarantine-check` passes, with no human review, while every other PR on `main` still needs a review?
 
-**Answer.** Not with GitHub auto-merge: **auto-merge does not apply the App's ruleset bypass.** The PR waits for a review forever. **App-driven merge works:** when the App calls the REST merge endpoint itself, the review bypass applies and the required check is still enforced. Decision: App-driven merge (see [Decision](#decision)).
+**Answer.** Not with GitHub auto-merge: **auto-merge does not apply the App's ruleset bypass.** The PR waits for a review forever. **App-driven merge works:** when the App calls the REST merge endpoint itself, the review bypass applies and the required check is still enforced. Decision: App-driven merge, where the bot verifies the PR itself before merging, because the required check alone can be rewritten by whoever pushes to the PR (see [Decision](#decision) and [Security review](#security-review-pre-merge-verification)).
 
 ## App manifest
 
@@ -15,7 +15,7 @@ Created with `spikes/github-app/create_app.py` (GitHub App manifest flow: one cl
 | Name | `fq-bot-dev-2` (App id 5866726). `fq-bot-dev` was taken; App names are global |
 | Visibility | private (installable only on the owner's account) |
 | Repository permissions | `contents: write`, `pull_requests: write`, `metadata: read`, `checks: read` |
-| Webhook events | `pull_request`, `push`. Webhooks stayed **disabled** in the spike; a real deployment sets a URL and a webhook secret (§13) |
+| Webhook events | `pull_request`, `push` on `fq-bot-dev-2`; `create_app.py` now also subscribes to `check_suite`, which the chosen design uses. Webhooks stayed **disabled** in the spike; a real deployment sets a URL and a webhook secret (§13) |
 | Never grant | `workflows`. Without it the bot cannot edit the check workflow, so it cannot remove its own gate |
 | Installed on | `fq-sandbox` only (installation 184471304, "selected repositories") |
 | Private key | `~/.secrets/fq-bot-dev-2.pem`, outside the repo; `*.pem`, `*.key`, `.secrets/` are gitignored |
@@ -78,17 +78,20 @@ Exported from the API (`gh api repos/IrynaShkvirko/fq-sandbox/rulesets/<id>`, wi
 
 ## Scenario results
 
-All PRs are in `IrynaShkvirko/fq-sandbox`. The "auto-merge" column is GitHub's native auto-merge (GraphQL `enablePullRequestAutoMerge`, squash); "App merge" is `fq_bot.py --merge N` (REST `PUT /pulls/{n}/merge`, squash, pinned to the head SHA).
+All PRs are in `IrynaShkvirko/fq-sandbox`. Each scenario was run twice, with a separate PR per merge method:
 
-| # | Scenario | Expected | Auto-merge | App merge | PR |
-| --- | --- | --- | --- | --- | --- |
-| 1 | App PR changes only `quarantine.yaml` | check passes, merges with no review | ❌ check passed, but the PR stayed `BLOCKED` / `REVIEW_REQUIRED` | ✅ HTTP 200, merged by `app/fq-bot-dev-2` with no review | #1 |
-| 2 | App PR also changes `README.md` (`--also-readme`) | check fails, no merge | ✅ check failed, not merged | ✅ HTTP 405 "Required status check "fq-quarantine-check" is failing" | #6 (#2 superseded) |
-| 3 | Human PR changes only `quarantine.yaml` | still needs a review | ✅ check passed, `BLOCKED` / `REVIEW_REQUIRED` | ✅ owner's merge refused, HTTP 405 "New changes require approval from someone other than the last pusher" | #8 (#4 superseded) |
-| 4 | App PR when the check fails (`--delete`: quarantine-only PR that deletes the file) | stays open | ✅ check failed, not merged | ✅ HTTP 405 "Required status check "fq-quarantine-check" is failing" | #7 (#3, #5 superseded) |
-| extra | App pushes straight to `main` (contents API) | refused | — | ✅ HTTP 409 "Changes must be made through a pull request" | — |
+- **Auto-merge:** GitHub's native auto-merge (GraphQL `enablePullRequestAutoMerge`, squash), on PRs #1–#5.
+- **App merge:** `fq_bot.py --merge N` (REST `PUT /pulls/{n}/merge`, squash, pinned to the head SHA), on #1, #6, #7 and #8. These ran with GitHub's rulesets as the only guard, before the bot's own pre-merge verification was added (see [Security review](#security-review-pre-merge-verification)).
 
-Superseded PRs were closed with a comment: #3 because the `--delete` flag was not wired in yet (it modified the file instead), and #2, #4 and #5 because #1 changed `quarantine.yaml` on `main` and they then had merge conflicts. Those conflicts would have hidden the reason for the refusal, so each scenario was rerun from the new `main`.
+| # | Scenario | Expected | Auto-merge (PR) | App merge (PR) |
+| --- | --- | --- | --- | --- |
+| 1 | App PR changes only `quarantine.yaml` | check passes, merges with no review | ❌ #1: auto-merge on, check passed, but the PR stayed `BLOCKED` / `REVIEW_REQUIRED`. #3 behaved the same | ✅ #1: HTTP 200, merged by `app/fq-bot-dev-2` with no review |
+| 2 | App PR also changes `README.md` (`--also-readme`) | check fails, no merge | ✅ #2: auto-merge on, check failed, not merged | ✅ #6: HTTP 405 "Required status check "fq-quarantine-check" is failing" |
+| 3 | Human PR changes only `quarantine.yaml` | still needs a review | ✅ #4: auto-merge on, check passed, `BLOCKED` / `REVIEW_REQUIRED`, never merged | ✅ #8: owner's merge refused, HTTP 405 "New changes require approval from someone other than the last pusher" |
+| 4 | App PR when the check fails (`--delete`: quarantine-only PR that deletes the file) | stays open | ✅ #5: auto-merge on, check failed, not merged | ✅ #7: HTTP 405 "Required status check "fq-quarantine-check" is failing" |
+| extra | App pushes straight to `main` (contents API) | refused | — | ✅ HTTP 409 "Changes must be made through a pull request" |
+
+The auto-merge PRs #2–#5 were closed afterwards so the App-merge runs could start from a clean `main`. #3 had been meant for scenario 4, but the `--delete` flag was not wired in yet, so it modified the file instead (an extra scenario-1 data point). #2, #4 and #5 conflicted once #1 merged; their auto-merge results above were read before they were closed.
 
 The check itself was also run locally under GNU grep (the runner's grep) against 8 cases: modify and add pass; a second file, delete, symlink, exec bit, empty diff and rename-to-`quarantine.yaml` fail.
 
@@ -96,18 +99,43 @@ The check itself was also run locally under GNU grep (the runner's grep) against
 
 **App-driven merge.** The bot opens the PR with no auto-merge, and merges it itself once `fq-quarantine-check` succeeds:
 
-1. Trigger: a `check_suite` (`completed`) webhook for a bot PR. Back it with a periodic sweep of open bot PRs, because webhooks can be missed. Both paths are idempotent: merge only if the PR is open, labelled for automatic merge and its head SHA is the one that passed.
-2. Merge: `PUT /repos/{repo}/pulls/{n}/merge` with `merge_method: squash` and `sha: <head sha>`, so a push after the check cannot be merged unchecked.
-3. Ruleset B is the safety net: even if the bot calls merge too early or on a failing PR, GitHub refuses it (scenarios 2 and 4).
-4. Over-cap PRs (§4.1 step 3.2) are simply never merged by the bot; the lead merges them by approving.
+1. Trigger: a sweep job over open bot PRs with `bot_pull_requests.auto_merge` set. A `check_suite` `completed` webhook can run the same check sooner, if GitHub delivers it to the App for Actions-created suites (not verified: webhooks were off in the spike). Both paths are idempotent.
+2. **Pre-merge verification by the bot**, independent of CI: bot author, same-repo branch, head SHA equal to the commit the bot pushed, exactly `quarantine.yaml` added or modified. See [Security review](#security-review-pre-merge-verification) for why this is required.
+3. Merge: `PUT /repos/{repo}/pulls/{n}/merge` with `merge_method: squash` and `sha: <head sha>`, so a push after the check cannot be merged unchecked.
+4. Ruleset B is a second layer: even if the bot calls merge too early or on a failing PR, GitHub refuses it (scenarios 2 and 4).
+5. Over-cap PRs (§4.1 step 3.2) are simply never merged by the bot; the lead merges them by approving.
 
 **Ruleset layout to require in user repos:** exactly the two rulesets above. A for review with the App as a `pull_request`-mode bypass actor; B for `fq-quarantine-check` pinned to GitHub Actions, with no bypass. Recommended for M3: set `allowed_merge_methods: ["squash"]` on ruleset A (not tested in the spike).
 
 **Spec changes (agreed and made in `docs/architecture.md`, decision D39):**
 
 - §2: new decision D39. "Auto-merge" in the spec means the bot merges its own PR through the REST API; GitHub's native auto-merge is not used.
-- §9.5: the merge trigger (`check_suite` webhook plus sweep), the merge call pinned to the head SHA, `checks: read` added to the permissions (needed only to receive `check_suite` events), `workflows` never granted, and the two-ruleset layout.
-- §4.1 step 3.3, §8.1 (API table: `check_suite` on the GitHub webhook), the §7 component diagram and the §8.4 sequence diagram updated to match.
+- §9.5: the merge trigger (sweep, plus `check_suite` webhook), the bot's pre-merge verification, the merge call pinned to the head SHA, `checks: read` and the `check_suite` event, `workflows` never granted, the two-ruleset layout, and protecting release branches and tags.
+- §4.1 step 3.3, §8.1 (API table: `check_suite` on the GitHub webhook), the §7 component diagram, the §8.4 sequence diagram, the `bot_pull_requests.head_sha` column (§10) and the `fq-bot-merge-sweep` CronJob (§14) updated to match.
+
+## Security review: pre-merge verification
+
+The security review of this PR found that the required check alone cannot keep the bypass limited to `quarantine.yaml`. A `pull_request` workflow runs the workflow file **from the PR head**, so anyone who can push to the bot's branch can rewrite the check. The App then merges whatever is there with no review.
+
+Reproduced on `IrynaShkvirko/fq-sandbox-2`:
+
+| Step | Result |
+| --- | --- |
+| Bot opens PR #3 (head `a643cd6`, only `quarantine.yaml`) | — |
+| A human pushes a commit to the bot's branch that replaces the check with `echo` and changes `README.md` | **`fq-quarantine-check`: SUCCESS** on the new head `949e572`. GitHub's rulesets are satisfied: the App bypasses review and the check passed |
+| `fq_bot.py --merge 3 --expect-sha a643cd6` (with the bot's own verification) | **refused by the bot:** 3 files changed, and the head is not the bot's commit. PR closed unmerged |
+
+The bot's own checks, run live:
+
+| Case | Result |
+| --- | --- |
+| fq-sandbox #6: `README.md` + `quarantine.yaml` | refused: not only `quarantine.yaml` |
+| fq-sandbox #7: `quarantine.yaml` deleted | refused: status `removed` |
+| fq-sandbox #8: human author | refused: author is not `fq-bot-dev-2[bot]` |
+| fq-sandbox-2 #2: wrong `--expect-sha` | refused: head is not the bot's commit |
+| fq-sandbox-2 #2: correct `--expect-sha` | HTTP 200, merged |
+
+So the bot's pre-merge verification is the primary control, and the required check is a second layer. Both are now in §9.5.
 
 ## Setup for a new repo
 
@@ -136,7 +164,7 @@ The steps it automates:
    jq '.checks' spikes/github-app/rulesets.json | gh api -X POST repos/OWNER/REPO/rulesets --input -
    ```
 
-6. **Smoke test:** `uv run spikes/github-app/fq_bot.py --repo OWNER/REPO --no-auto-merge`, wait for the check, then `uv run spikes/github-app/fq_bot.py --repo OWNER/REPO --merge <PR>`. Expect HTTP 200.
+6. **Smoke test:** `uv run spikes/github-app/fq_bot.py --repo OWNER/REPO --no-auto-merge` (prints the PR URL and `head:` SHA), wait for the check, then `uv run spikes/github-app/fq_bot.py --repo OWNER/REPO --merge <PR> --expect-sha <head>`. Expect HTTP 200.
 
 ## Open items
 
@@ -145,24 +173,29 @@ The steps it automates:
 - [x] Run the four scenarios on `fq-sandbox` and fill in the results table.
 - [x] Export both rulesets from the API and paste the JSON above.
 - [x] Time the setup on a second repo (target: under 15 minutes): `fq-sandbox-2`, 5 min 38 s with `setup_repo.sh`.
-- [x] Record the decision: App-driven merge. `fq_bot.py --merge` is the REST merge; the `check_suite` handler is M3-01 work (webhooks were disabled in the spike).
+- [x] Record the decision: App-driven merge, with the bot's own pre-merge verification. `fq_bot.py --merge` is the prototype; the sweep job and webhook handler are M3-01 work.
+- [x] Security review: the bypass hole (a push to the bot's branch rewrites the check) was reproduced and closed by the pre-merge verification; §9.5 updated.
 - [x] Agree the §9.5 / §4.1 changes above, including keeping `checks: read`: made in `docs/architecture.md` as D39.
 - [x] Scenario 4: `fq_bot.py --delete` opens a quarantine-only PR whose check fails.
 
 **Carry into M3-01 (the prototype is not production code):**
 
-- [ ] `check_suite` webhook handler plus a periodic sweep that merge bot PRs (idempotent, pinned to the head SHA).
+- [ ] `fq-bot-merge-sweep` job and `check_suite` handler that merge bot PRs: idempotent, pre-merge verification as in §9.5, merge pinned to `bot_pull_requests.head_sha`.
+- [ ] Verify that GitHub delivers `check_suite` `completed` to the App for suites created by GitHub Actions. If not, use `workflow_run` or rely on the sweep alone.
+- [ ] Try a ruleset on `refs/heads/fq/**` that blocks updates by anyone except the App (bypass mode `always`), so humans can't push to bot branches at all.
+- [ ] Onboarding check: release branches and tags are protected by rulesets the App can't bypass (a leaked key with `contents:write` can push to anything unprotected).
 - [ ] Pin `actions/checkout` and every other action by full commit SHA.
 - [ ] Extend `fq-quarantine-check` with §9.5 content validation: schema, known tests or pending renames, no protected tests, a Jira key on every entry.
-- [ ] Decide on `strict_required_status_checks_policy`: with `false`, a bot PR can merge without being rebased onto the latest `main`, so the known-test validation may run against stale `main`.
-- [ ] `put_file`: treat only 404 as "file missing"; raise on any other non-200. `merge()` should exit non-zero on a refused merge.
+- [ ] Stale base: with `strict_required_status_checks_policy: false`, the check may have validated against an older `main`. §9.5 says the bot updates its branch and waits for the check again when `main`'s `quarantine.yaml` changed; implement that, or turn on strict mode.
+- [ ] `put_file`: treat only 404 as "file missing"; raise on any other non-200. (`merge()` already exits non-zero on a refused merge.)
 - [ ] Pin the httpx and pyjwt versions. Add bounded retries with backoff that respect 429 / `Retry-After` (CLAUDE.md).
 - [ ] Never overwrite `quarantine.yaml` wholesale. Edit the entries instead.
 - [ ] Validate repo names from the DB with the same `OWNER/NAME` pattern.
 
 ## Things to watch
 
-- `fq-quarantine-check` is the **only** control behind the review bypass. The spike check requires exactly one raw diff line, status `M`/`A`, mode `100644`, path `quarantine.yaml` (no deletes, renames or symlinks). M3 must add schema, protected-test and Jira-key validation (§9.5) before this goes near a real repo.
+- `fq-quarantine-check` is a **second layer**, not the guarantee: its workflow comes from the PR head. The spike check requires exactly one raw diff line, status `M`/`A`, mode `100644`, path `quarantine.yaml` (no deletes, renames or symlinks). M3 must add schema, protected-test and Jira-key validation (§9.5).
+- The sandboxes are public, so forks can open PRs there. A public sandbox must never run the automatic merge path.
 - Ruleset B pins the check to GitHub Actions (`integration_id` 15368) so nothing else can post a status with that name.
 - Installation tokens are scoped to one repo with `contents` and `pull_requests` write only. Rotate the App key every 90 days (§9.5).
 - `pull_request` bypass mode is what keeps the App off `main` directly: the direct push in the extra scenario was refused.
