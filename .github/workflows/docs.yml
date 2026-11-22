@@ -46,6 +46,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # project-ci installs with PUPPETEER_SKIP_DOWNLOAD and shares the pnpm store cache, so on a
+      # cache hit puppeteer counts as built and its Chrome download never runs. mermaid-cli needs it.
+      - run: pnpm rebuild puppeteer
       - run: pnpm test
       - run: pnpm check:mermaid
       - run: pnpm build
