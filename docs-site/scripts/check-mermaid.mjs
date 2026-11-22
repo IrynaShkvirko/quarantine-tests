@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = import.meta.dirname;
 const mmdc = path.join(here, '../node_modules/.bin/mmdc');
 const roots = [path.join(here, '../content/docs'), path.join(here, '../../docs')];
 

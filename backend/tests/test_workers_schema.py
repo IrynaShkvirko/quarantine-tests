@@ -1,4 +1,3 @@
-import os
 from collections.abc import Iterator
 from urllib.parse import urlsplit, urlunsplit
 
@@ -6,6 +5,7 @@ import psycopg
 import pytest
 from psycopg import sql
 
+from app.settings import get_settings
 from app.workers import schema
 
 pytestmark = pytest.mark.integration
@@ -21,7 +21,7 @@ def _with_database(url: str, database: str) -> str:
 @pytest.fixture
 def scratch_dsn() -> Iterator[str]:
     """An empty throwaway database on the compose Postgres (needs `make up` and the .env values)."""
-    admin_url = os.environ["FQ_DATABASE_URL"].replace("+psycopg", "", 1)
+    admin_url = get_settings().psycopg_dsn
     name = sql.Identifier(_SCRATCH_DB)
     with psycopg.connect(admin_url, autocommit=True) as admin:
         admin.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(name))

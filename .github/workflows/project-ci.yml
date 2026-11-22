@@ -64,6 +64,9 @@ jobs:
               - 'pyproject.toml'
               - 'uv.lock'
               - '.python-version'
+              - '.dockerignore'
+              - 'plugins/pytest-flaky-reporter/pyproject.toml'
+              - 'ci/fq-cli/pyproject.toml'
               - '.github/workflows/project-ci.yml'
       # Separate step: `every` makes a file count only if it matches ALL patterns (i.e. it is
       # not documentation). With the default `some`, '**' would match everything.
@@ -165,25 +168,12 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --all-packages
-      # TODO(M0-06): remove the hashFiles guards and the exit-code-5 allowance once
-      # backend/alembic.ini and the first integration tests exist, so a missing setup fails.
       - name: alembic upgrade head
-        if: hashFiles('backend/alembic.ini') != ''
         working-directory: backend
         run: uv run alembic upgrade head
       - name: pytest -m integration
-        if: hashFiles('backend/alembic.ini') != ''
-        # Override the default `-m 'not integration'` from addopts. Exit code 5 means no tests
-        # were collected: allowed until M0-06 adds the first integration tests.
-        run: |
-          set +e
-          uv run pytest -m integration -o addopts=""
-          rc=$?
-          if [ "$rc" -eq 5 ]; then
-            echo "::notice::No integration tests collected yet"
-            exit 0
-          fi
-          exit "$rc"
+        # Override the default `-m 'not integration'` from addopts.
+        run: uv run pytest -m integration -o addopts=""
 
   docker:
     needs: changes
@@ -194,11 +184,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      # TODO(M0-05): remove the hashFiles guards once backend/Dockerfile exists.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-        if: hashFiles('backend/Dockerfile') != ''
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        if: hashFiles('backend/Dockerfile') != ''
         with:
           context: .
           file: backend/Dockerfile
