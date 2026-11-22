@@ -11,12 +11,13 @@
  *
  * Generated files are gitignored. Run with `pnpm sync` (also runs before dev and build).
  */
+import { realpathSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = import.meta.dirname;
 const SRC = path.resolve(process.env.DOCS_SRC ?? path.join(here, '../../docs'));
-const OUT = path.resolve(path.join(here, '../content/engineering'));
+const OUT = path.resolve(process.env.DOCS_OUT ?? path.join(here, '../content/engineering'));
 const REPO_ROOT = path.resolve(here, '../..');
 const repo = JSON.parse(await fs.readFile(path.join(here, '../lib/repo.json'), 'utf8'));
 const GITHUB = `https://github.com/${repo.user}/${repo.repo}`;
@@ -203,12 +204,20 @@ async function main() {
     folders.get('.').push('index');
   }
 
+  // Folders that hold only subfolders (docs/tasks/ holds only M0/) need a sidebar entry too.
+  for (const folder of [...folders.keys()]) {
+    for (let parent = path.dirname(folder); parent !== '.'; parent = path.dirname(parent)) {
+      if (!folders.has(parent)) folders.set(parent, []);
+    }
+  }
+  const childFolders = (parent) =>
+    [...folders.keys()].filter((f) => f !== '.' && path.dirname(f) === parent).map((f) => path.basename(f));
+
   // meta.json files
   for (const [folder, slugs] of folders) {
     const dir = path.join(OUT, folder);
     if (folder === '.') {
-      const subfolders = [...folders.keys()].filter((f) => f !== '.' && !f.includes(path.sep));
-      const present = new Set([...slugs, ...subfolders]);
+      const present = new Set([...slugs, ...childFolders('.')]);
       const ordered = ROOT_ORDER.filter((x) => x.startsWith('---') || present.has(x));
       const rest = [...present].filter((x) => !ROOT_ORDER.includes(x)).sort();
       await fs.writeFile(
@@ -219,7 +228,11 @@ async function main() {
       const name = path.basename(folder);
       await fs.writeFile(
         path.join(dir, 'meta.json'),
-        JSON.stringify({ title: FOLDER_TITLES[name] ?? name, pages: [...slugs].sort().reverse() }, null, 2),
+        JSON.stringify(
+          { title: FOLDER_TITLES[name] ?? name, pages: [...slugs, ...childFolders(folder)].sort().reverse() },
+          null,
+          2,
+        ),
       );
     }
   }
@@ -228,7 +241,8 @@ async function main() {
 }
 
 // Run only as a script, so the tests can import githubHref.
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+// import.meta.filename has symlinks resolved and argv[1] doesn't, so resolve argv[1] too.
+if (process.argv[1] && realpathSync(process.argv[1]) === import.meta.filename) {
   main().catch((e) => {
     console.error(e);
     process.exit(1);
