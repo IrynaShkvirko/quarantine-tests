@@ -38,7 +38,7 @@ sequenceDiagram
 
     Cli->>Cli: fq fetch-quarantine<br/>(quarantine.yaml from default branch)
     alt Fetch fails
-        Cli-->>Cli: Use backend last-known-good list, warn in job summary<br/>(never the PR checkout's copy); fail the job if unavailable
+        Cli-->>Cli: Use backend last-known-good list, warn in job summary<br/>(never the PR checkout's copy), and fail the job if unavailable
     end
 
     Run->>Run: Run tests except quarantined, up to 2 reruns
@@ -46,7 +46,7 @@ sequenceDiagram
     Rep->>Rep: Write JUnit XML with fq.test_key,<br/>fq.attempt, fq.tags properties
 
     Cli->>Cli: fq gate (failures minus the fetched quarantined list)
-    Note right of Cli: Decides green / red build; needs the backend<br/>only when the git fetch of the list failed
+    Note right of Cli: Decides green / red build, and needs the backend<br/>only when the git fetch of the list failed
 
     Cli->>API: fq upload: POST /api/v1/ingest/runs<br/>(metadata + JUnit, Bearer repo token)
 

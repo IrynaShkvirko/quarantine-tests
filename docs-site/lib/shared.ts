@@ -1,8 +1,7 @@
-export const gitConfig = {
-  user: 'IrynaShkvirko',
-  repo: 'quarantine-tests',
-  branch: 'main',
-};
+import repo from './repo.json';
+
+/** Also read by scripts/sync-engineering.mjs, so the repo is named in one place. */
+export const gitConfig = repo;
 
 export const repoUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
 
