@@ -9,7 +9,7 @@ Rules for every agent and person working in this repo. Read this first, then the
 - **Design spec (source of truth):** `docs/architecture.md`. Issues, requirements and plans cite it by section (§3.4). If an issue and the spec disagree, stop and ask; never pick one silently.
 - **Tasks:** GitHub Issues titled `[M0-01] ...`, grouped into milestones M0–M7 on the "Flaky Test Quarantine" project board. One issue per PR.
 - **Feature work:** design in `docs/feature-requirements/`, detailed requirements in `docs/requirements/`, agent plans in `docs/plans/`, spike findings in `docs/spikes/`, contracts in `docs/contracts/`.
-- **Status:** pre-M0. The layout and commands below arrive with M0-01 (repo skeleton) and M0-05 (local environment). Until then, don't invent other commands or folders.
+- **Status:** M0. `make setup`, `make lint`, `make typecheck` and `make test` work (M0-01). `make up`, `make down`, docker-compose and `pytest -m integration` arrive with M0-05 and M0-06. Until a command is marked done in its issue, don't rely on it, and don't invent other commands or folders.
 
 ## Stack
 
@@ -27,12 +27,12 @@ Rules for every agent and person working in this repo. Read this first, then the
 
 ```bash
 make setup        # uv sync, pnpm install, pre-commit install
-make up           # Postgres, migrations, API, worker, Grafana (docker-compose)
-make down
+make up           # (M0-05) Postgres, migrations, API, worker, Grafana (docker-compose)
+make down         # (M0-05)
 make lint         # ruff, eslint, prettier
 make typecheck    # mypy, tsc
 make test         # unit tests
-pytest -m integration          # needs `make up`
+pytest -m integration          # (M0-05/M0-06) needs `make up`
 pnpm -r test                   # TypeScript plugins
 pytest <file> --count=10 -p no:randomly   # prove new tests aren't flaky
 cd docs-site && pnpm dev       # docs site (syncs docs/ first)
@@ -41,6 +41,8 @@ cd docs-site && pnpm dev       # docs site (syncs docs/ first)
 Run `make lint typecheck test` before saying a task is done, plus `pytest -m integration` when you touched the database, queue or migrations.
 
 ## Layout
+
+Target layout: folders appear as their tasks land (M0–M1). Don't create one early.
 
 ```
 backend/app/
@@ -67,8 +69,9 @@ grafana/provisioning/  config-example/  demo/  deploy/helm/  docs/  docs-site/  
 - **SQL:** SQLAlchemy 2.0 expressions or bound parameters only. Every query on `test_executions` filters `executed_at`.
 - **Migrations:** autogenerate, then read and fix; working `downgrade()`; never edit a merged migration.
 - **Config:** runtime settings only via `app/settings.py` (`FQ_*` env); behavior config only via `app/config/` models. Thresholds come from config (`teams.yaml` defaults, §5.1), never hardcoded.
-- **Errors:** no bare `except` / `except Exception: pass`. Domain exceptions map to HTTP status in one place.
+- **Errors:** no bare `except` / `except Exception: pass`. Domain exceptions map to HTTP status in one place. No silent failures: log or raise, never ignore.
 - **Logging:** structlog, snake_case event names with `upload_id`, `test_id`, `repo`; never tokens, auth headers or unmasked failure text.
+- **Small functions, one job each.**
 - **Types everywhere;** `mypy --strict` for `domain/` and `config/`; TypeScript `strict`, no `any`.
 - Details: `.claude/skills/backend-best-practices/SKILL.md`.
 
@@ -99,7 +102,7 @@ grafana/provisioning/  config-example/  demo/  deploy/helm/  docs/  docs-site/  
 3. **Implement** in the order: config → schema → domain (test-first) → repositories → integrations → tasks/jobs → API → wiring → docs.
 4. **Verify** with the commands above; self-review against the skills you loaded.
 5. **Review:** `backend-reviewer` for `backend/` and `ci/fq-cli/`; `security-reviewer` for ingestion, webhooks, parsing, credentials, workflows; `plan-verifier` against the issue or plan.
-6. **Commit / PR** only when asked: conventional commits with the task ID (`feat(M1-01): add ingestion endpoint`), PR body ends with `Closes #<issue>`. Never push or commit unless explicitly asked; one commit per request. See `.claude/skills/git-workflow/SKILL.md`.
+6. **Commit / PR** only when asked: conventional commits with the task ID (`feat(M1-01): add ingestion endpoint`), the PR body follows `.github/pull_request_template.md` and ends with `Closes #<issue>`. Never push or commit unless explicitly asked; one commit per request. See `docs/CONTRIBUTING.md` and `.claude/skills/git-workflow/SKILL.md`.
 
 Agents and skills: `docs/agents.md` and `.claude/`.
 

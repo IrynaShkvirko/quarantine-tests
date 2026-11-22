@@ -1,0 +1,45 @@
+name: Spike
+description: A timeboxed investigation that answers one question and records a decision.
+title: '[Mx-xx] Spike: '
+labels: ['spike']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A spike ends with a written finding in `docs/spikes/`, not with production code.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: The one question this spike answers.
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Timebox
+      description: Hard limit. Stop and report when it runs out.
+      placeholder: '0.5 day'
+    validations:
+      required: true
+  - type: textarea
+    id: what-to-try
+    attributes:
+      label: What to try
+      description: Approaches to test, in order, and what result decides between them.
+    validations:
+      required: true
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Deliverable
+      description: A findings doc in `docs/spikes/`, plus any throwaway code and where it lives.
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision to record
+      description: The decision the findings feed, and where it is recorded (for example `docs/architecture.md` §, or a D-number).
+    validations:
+      required: true

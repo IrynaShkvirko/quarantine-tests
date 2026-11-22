@@ -1,6 +1,6 @@
 # Agents, skills and commands
 
-The `.claude/` folder holds the AI coding agents, the skills they load and the slash commands used to build this project. Rules every agent follows live in `CLAUDE.md` (created in M0-02).
+The `.claude/` folder holds the AI coding agents, the skills they load and the slash commands used to build this project. Rules every agent follows live in `CLAUDE.md`.
 
 ## Agents
 
