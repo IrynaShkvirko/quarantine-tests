@@ -12,7 +12,7 @@ lint:
 	pnpm exec prettier --check .
 
 typecheck:
-	uv run mypy backend plugins/pytest-flaky-reporter ci/fq-cli
+	uv run mypy backend plugins/pytest-flaky-reporter ci/fq-cli scripts/github
 	pnpm -r typecheck
 
 test:

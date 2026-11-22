@@ -4,13 +4,15 @@
 # M0-03's import script later takes over these issues and creates M1–M7.
 #
 # Usage: scripts/github/create_m0_issues.sh [owner/repo] [--dry-run]
+# Repo default: $FQ_GITHUB_REPO, else the repo of the current directory.
 # Needs: gh (logged in with `gh auth login`, scope `repo`). Works with macOS bash 3.2.
 set -euo pipefail
 
-REPO="${1:-IrynaShkvirko/quarantine-tests}"
+REPO="${1:-${FQ_GITHUB_REPO:-}}"
 DRY_RUN=false
 [[ "${2:-}" == "--dry-run" || "${1:-}" == "--dry-run" ]] && DRY_RUN=true
-[[ "$REPO" == "--dry-run" ]] && REPO="IrynaShkvirko/quarantine-tests"
+[[ "$REPO" == "--dry-run" ]] && REPO="${FQ_GITHUB_REPO:-}"
+[[ -n "$REPO" ]] || REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DIR="$ROOT/docs/tasks/M0"

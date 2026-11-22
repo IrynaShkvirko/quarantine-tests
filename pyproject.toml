@@ -43,8 +43,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 known-first-party = ["app", "fq_cli", "pytest_flaky_reporter"]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests", "plugins/pytest-flaky-reporter/tests", "ci/fq-cli/tests"]
+testpaths = ["backend/tests", "plugins/pytest-flaky-reporter/tests", "ci/fq-cli/tests", "scripts/github"]
 norecursedirs = ["spikes", "node_modules", ".venv", "docs-site"]
+pythonpath = ["scripts/github"]
 markers = ["integration: needs `make up` (Postgres)"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
