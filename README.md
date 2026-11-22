@@ -11,6 +11,7 @@ make setup      # uv sync, pnpm install, pre-commit install
 make lint       # ruff, eslint, prettier
 make typecheck  # mypy, tsc
 make test       # pytest and vitest unit tests
-make up         # local environment (added in M0-05)
+make up         # local environment: Postgres, migrations, API, worker, Grafana (needs .env)
 make down
+make reset-db   # drop the database volume and re-migrate
 ```

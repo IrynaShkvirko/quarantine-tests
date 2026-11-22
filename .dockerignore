@@ -1,0 +1,14 @@
+**
+!pyproject.toml
+!uv.lock
+!backend/
+!plugins/pytest-flaky-reporter/pyproject.toml
+!ci/fq-cli/pyproject.toml
+backend/tests
+backend/.venv
+**/.env*
+**/*.pem
+**/*.key
+**/.*_cache
+**/__pycache__
+**/*.pyc
