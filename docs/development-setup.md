@@ -1,6 +1,6 @@
 # Development setup
 
-How to run the project locally. The commands below arrive with M0-01 (repo skeleton) and M0-05 (local environment); until then this page is the target.
+How to run the project locally. Some commands (`fq-admin`, `pytest -m integration`) arrive with later tasks; until then those parts of this page are the target.
 
 ## Requirements
 
@@ -20,8 +20,31 @@ make test       # unit tests
 pytest -m integration
 ```
 
-- API: `http://localhost:8000` (`/healthz`, `/readyz`, `/metrics`)
-- Grafana: `http://localhost:3000`
+- API: `http://localhost:8000` (`/healthz` today; `/readyz` and `/metrics` arrive with the backend skeleton)
+- Grafana: `http://localhost:3000`, login from `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` in `.env`
+- Postgres: `localhost:5433` (`FQ_DB_HOST_PORT`), databases `fq` and `fq_test`
+
+### Local environment
+
+| Command | What it does |
+|---------|--------------|
+| `make up` | Builds the backend image, starts db, migrate, api, worker and Grafana, and waits until they are healthy |
+| `make down` | Stops the stack and keeps the `pgdata` volume |
+| `make reset-db` | Drops the volume and starts again: empty database, migrations re-applied |
+| `make logs` | Follows the logs of all services |
+| `make psql` | Opens `psql` on database `fq` as the owner role |
+| `make integration` | Runs `pytest -m integration` against the running stack, with the host-side values from `.env` |
+| `make smoke` | Checks `/healthz`, the `fq-postgres` Grafana datasource, `grafana_ro` read-only access and the image (non-root, under 300 MB) |
+
+The `migrate` service runs `alembic upgrade head`, then installs the Procrastinate queue schema if it is missing.
+Grafana reads the database through the read-only role `grafana_ro` (SELECT on the `reporting` schema only); the role and
+both databases are created by `docker/postgres/init.sh` the first time the volume is initialised, so changes to that
+script need `make reset-db`. The same applies to `POSTGRES_PASSWORD` and `GRAFANA_RO_PASSWORD`: changing them in `.env`
+has no effect on an existing volume. Use URL-safe characters in the passwords, because they are embedded in database URLs.
+Both `fq` and `fq_test` are migrated by the `migrate` service.
+
+The backend image has one entrypoint with several roles: `api`, `worker`, `job <name>` and `migrate`.
+All host ports are bound to `127.0.0.1`.
 
 ## Demo data
 
