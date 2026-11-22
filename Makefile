@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test up down reset-db logs psql smoke integration
+.PHONY: setup lint typecheck test up down reset-db logs psql smoke integration docs docs-build
 
 setup:
 	uv sync --all-packages
@@ -44,3 +44,9 @@ smoke:
 # Integration tests against the running stack (`make up`); loads the host-side values from .env.
 integration:
 	set -a && . ./.env && set +a && uv run pytest -m integration
+
+docs:
+	cd docs-site && pnpm dev
+
+docs-build:
+	cd docs-site && pnpm check:mermaid && pnpm build && pnpm check:links

@@ -1,7 +1,7 @@
 /**
  * Renders every ```mermaid block in content/docs and ../docs with mermaid-cli,
  * so a broken diagram fails CI instead of showing an error on the site.
- * Needs network once to fetch @mermaid-js/mermaid-cli through npx.
+ * mermaid-cli is a pinned devDependency (headless Chrome comes from its puppeteer install).
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
+const mmdc = path.join(here, '../node_modules/.bin/mmdc');
 const roots = [path.join(here, '../content/docs'), path.join(here, '../../docs')];
 
 async function* files(dir) {
@@ -20,6 +21,13 @@ async function* files(dir) {
 }
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'mmd-'));
+// GitHub's ubuntu runners block Chrome's sandbox for unprivileged users; the input is our own docs.
+const puppeteerArgs = [];
+if (process.env.GITHUB_ACTIONS === 'true') {
+  const config = path.join(tmp, 'puppeteer.json');
+  await fs.writeFile(config, JSON.stringify({ args: ['--no-sandbox'] }));
+  puppeteerArgs.push('-p', config);
+}
 let count = 0;
 let failed = 0;
 for (const root of roots) {
@@ -29,7 +37,7 @@ for (const root of roots) {
       const input = path.join(tmp, `${count}.mmd`);
       await fs.writeFile(input, chart);
       try {
-        execFileSync('npx', ['-y', '@mermaid-js/mermaid-cli', '-q', '-i', input, '-o', `${input}.svg`], { stdio: 'pipe' });
+        execFileSync(mmdc, ['-q', ...puppeteerArgs, '-i', input, '-o', `${input}.svg`], { stdio: 'pipe' });
       } catch (e) {
         failed += 1;
         console.error(`✗ ${path.relative(process.cwd(), file)} (diagram ${count})\n${e.stderr?.toString() ?? e}`);

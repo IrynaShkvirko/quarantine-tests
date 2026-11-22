@@ -33,7 +33,7 @@ export default defineConfig({
     remarkPlugins: [remarkMermaid],
     rehypeCodeOptions: {
       themes: { light: 'github-light', dark: 'github-dark' },
-      langs: ['js', 'ts', 'tsx', 'python', 'bash', 'json', 'yaml', 'toml', 'sql', 'groovy', 'xml', 'text'],
+      langs: ['js', 'ts', 'tsx', 'python', 'bash', 'json', 'yaml', 'toml', 'sql', 'groovy', 'xml'],
     },
   },
 });

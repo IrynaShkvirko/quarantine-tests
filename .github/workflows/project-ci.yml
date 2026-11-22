@@ -97,6 +97,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1' # docs-site's mermaid-cli needs Chrome only in docs.yml
       - run: uv sync --frozen --all-packages
       - run: make lint
       - run: make typecheck
@@ -127,6 +129,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1' # docs-site's mermaid-cli needs Chrome only in docs.yml
       # Root script (eslint + prettier). `pnpm -r lint` would skip the root and lint nothing.
       - run: pnpm lint
       - run: pnpm -r typecheck
@@ -222,6 +226,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1' # docs-site's mermaid-cli needs Chrome only in docs.yml
       - run: uv sync --frozen --all-packages
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:

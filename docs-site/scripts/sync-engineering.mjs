@@ -5,6 +5,8 @@
  * - Title comes from the first "# " heading (removed from the body, the page shows it).
  * - Description comes from the first paragraph after it.
  * - "<", "{" and "}" outside code are escaped so the files parse as MDX as well as Markdown.
+ * - Relative links to other synced pages become /engineering/... paths; links to repo files that are
+ *   not site pages (examples, CLAUDE.md, code) become GitHub links.
  * - meta.json files set the sidebar order.
  *
  * Generated files are gitignored. Run with `pnpm sync` (also runs before dev and build).
@@ -15,6 +17,9 @@ import path from 'node:path';
 const here = path.dirname(new URL(import.meta.url).pathname);
 const SRC = path.resolve(process.env.DOCS_SRC ?? path.join(here, '../../docs'));
 const OUT = path.resolve(path.join(here, '../content/engineering'));
+const REPO_ROOT = path.resolve(here, '../..');
+const repo = JSON.parse(await fs.readFile(path.join(here, '../lib/repo.json'), 'utf8'));
+const GITHUB = `https://github.com/${repo.user}/${repo.repo}`;
 
 /** Sidebar order and titles. Files/folders not listed are appended alphabetically. */
 const ROOT_ORDER = [
@@ -64,6 +69,61 @@ function escapeOutsideCode(markdown) {
     .join('\n');
 }
 
+/**
+ * Markdown links in docs/ are relative to the repo. Pages that become site pages keep working;
+ * links to other repo files (JSON examples, CLAUDE.md, code) are pointed at GitHub, and
+ * `../blob/main/...` (the form issue bodies use) is expanded.
+ */
+async function rewriteLinks(markdown, file) {
+  const out = [];
+  let fence = null;
+  for (const line of markdown.split('\n')) {
+    const m = line.match(/^\s*(```+|~~~+)/);
+    if (m) {
+      if (!fence) fence = m[1][0];
+      else if (m[1][0] === fence) fence = null;
+      out.push(line);
+      continue;
+    }
+    if (fence) {
+      out.push(line);
+      continue;
+    }
+    const parts = [];
+    let last = 0;
+    for (const link of line.matchAll(/(?<!!)\[([^\]]*)\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g)) {
+      const [whole, text, href, title] = link;
+      const fixed = await githubHref(href, file);
+      parts.push(line.slice(last, link.index));
+      parts.push(fixed ? `[${text}](${fixed}${title})` : whole);
+      last = link.index + whole.length;
+    }
+    parts.push(line.slice(last));
+    out.push(parts.join(''));
+  }
+  return out.join('\n');
+}
+
+export async function githubHref(href, file) {
+  if (/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(href)) return null;
+  const [target, fragment] = href.split('#');
+  const suffix = fragment ? `#${fragment}` : '';
+  const blob = target.match(/^(?:\.\.\/)+blob\/main\/(.+)$/);
+  if (blob) return `${GITHUB}/blob/${repo.branch}/${blob[1]}${suffix}`;
+  const abs = path.resolve(path.dirname(file), target);
+  if (abs.endsWith('.md') && abs.startsWith(SRC + path.sep)) {
+    // A synced page: use its site path, which doesn't depend on Fumadocs resolving relative .md links.
+    if (!(await fs.stat(abs).catch(() => null))) return null;
+    const slug = path.relative(SRC, abs).slice(0, -3).split(path.sep).join('/').replace(/(^|\/)index$/, '');
+    return `/engineering/${slug ? `${slug}/` : ''}${suffix}`;
+  }
+  const rel = path.relative(REPO_ROOT, abs);
+  if (rel.startsWith('..')) return null;
+  const stat = await fs.stat(abs).catch(() => null);
+  if (!stat) return null; // missing target: leave it so the link check reports it
+  return `${GITHUB}/${stat.isDirectory() ? 'tree' : 'blob'}/${repo.branch}/${rel.split(path.sep).join('/')}${suffix}`;
+}
+
 function plain(text) {
   return text
     .replace(/\*\*|__|`/g, '')
@@ -72,7 +132,7 @@ function plain(text) {
     .trim();
 }
 
-function toPage(raw, fallbackTitle) {
+async function toPage(raw, fallbackTitle, file) {
   let body = raw.replace(/^---\n[\s\S]*?\n---\n/, ''); // drop existing frontmatter, we regenerate it
   const h1 = body.match(/^#\s+(.+)$/m);
   const title = h1 ? plain(h1[1]) : fallbackTitle;
@@ -88,7 +148,7 @@ function toPage(raw, fallbackTitle) {
   const fm = ['---', `title: ${JSON.stringify(title)}`];
   if (description) fm.push(`description: ${JSON.stringify(description)}`);
   fm.push('---', '');
-  return fm.join('\n') + escapeOutsideCode(body.replace(/^\s+/, ''));
+  return fm.join('\n') + escapeOutsideCode(await rewriteLinks(body.replace(/^\s+/, ''), file));
 }
 
 async function walk(dir) {
@@ -116,7 +176,7 @@ async function main() {
     const folder = path.dirname(rel);
     const target = path.join(OUT, folder, `${slug}.md`);
     await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.writeFile(target, toPage(await fs.readFile(file, 'utf8'), slug));
+    await fs.writeFile(target, await toPage(await fs.readFile(file, 'utf8'), slug, file));
     if (!folders.has(folder)) folders.set(folder, []);
     folders.get(folder).push(slug);
   }
@@ -167,7 +227,10 @@ async function main() {
   console.log(`[sync-engineering] ${files.length} files from ${SRC} -> ${OUT}`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Run only as a script, so the tests can import githubHref.
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
