@@ -1153,7 +1153,9 @@ erDiagram
   }
 ```
 
-**Indexes added for detection (M2):** `ci_runs (repository_id, commit_sha, environment)` for the cross-run evidence lookup, and a unique index on `flaky_events (test_id, commit_sha, environment)` so each execution group produces at most one flaky occurrence.
+**Indexes for detection (created with schema v1, M0-09):** `ci_runs (repository_id, commit_sha, environment)` for the cross-run evidence lookup, and a unique index on `flaky_events (test_id, commit_sha, environment)` so each execution group produces at most one flaky occurrence.
+
+**Column types (M0-09):** `outcome`, `evidence`, `job_kind` and `event` are Postgres enums; every other value set above is `text` with a `CHECK`, so a new value needs no enum migration. `ci_runs.environment`, `flaky_events.environment` and `raw_uploads.shard` are `''`, not NULL, when unset: NULLs never collide in a unique key or match `environment = :env`. Table and partition details are in `docs/db.md`.
 
 **Retention (D31):** `test_executions` is partitioned by month, and partitions older than 90 days are dropped. `raw_uploads` and `flaky_events` are purged after 90 days. All other tables are kept indefinitely. A daily `retention` CronJob does the cleanup.
 

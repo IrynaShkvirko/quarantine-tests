@@ -41,9 +41,7 @@ All 5 agents run at the same time. Each owns its files exclusively (see File Own
 **Covers:** REQ-2.5 (environmental view), REQ-4.4–4.5 (daily stats, flips), REQ-6.1–6.5 (read API), data model changes (backend §1), reporting views (backend §12)
 
 **Files:**
-- `backend/alembic/versions/0004_detection.py` (NEW) — add `daily_test_stats.flips`, `quarantine_records.shadow_outcome` (+ CHECK), index `ci_runs (repository_id, commit_sha, environment)`, unique index `flaky_events (test_id, commit_sha, environment)`
 - `backend/alembic/versions/0005_reporting_views.py` (NEW) — `reporting.v_flaky_tests`, `v_flakiness_daily`, `v_shadow_decisions`, `v_environmental_runs` exactly as in `docs/contracts/reporting-views.md`; `GRANT SELECT` to `grafana_ro`
-- `backend/app/db/models/stats.py`, `backend/app/db/models/quarantine.py` (MODIFY) — new columns
 - `backend/app/db/repositories/executions.py` (NEW) — `load_run_groups(run_id) -> list[ExecutionGroup]`, `find_opposite_outcomes(test_id, sha, env, since)`, `count_groups(test_id, now)`
 - `backend/app/db/repositories/detection.py` (NEW) — `upsert_signatures`, `mark_run_classified`, `insert_flaky_event` (ON CONFLICT DO NOTHING, returns created?), `get_open_shadow_decision`, `record_shadow_decision`, `set_test_state`
 - `backend/app/db/repositories/stats.py` (NEW) — `rate_inputs(test_id, now) -> RateInput`, `team_cap_inputs(team_id, repo_id, now) -> PolicyInput parts`, `upsert_daily_stats(day)`, `update_cost_scores(now)`
@@ -51,7 +49,7 @@ All 5 agents run at the same time. Each owns its files exclusively (see File Own
 - `backend/app/api/read.py` (NEW) — 4 routes: `GET /api/v1/tests`, `/tests/{id}/history`, `/stats/flakiness`, `/quarantine`
 - `backend/app/api/schemas/read.py` (NEW) — `ReadFilters` (shared, backend §8), request/response models with `extra="forbid"`
 - `backend/app/api/service_auth.py` (NEW) — `require_service_token` dependency (`FQ_READ_API_TOKEN`, constant-time compare, 401 on failure)
-- Tests: `backend/tests/integration/db/test_migrations_0004_0005.py`, `test_detection_repositories.py`, `backend/tests/integration/jobs/test_aggregate_daily.py`, `backend/tests/integration/api/test_read_api.py`
+- Tests: `backend/tests/integration/db/test_migrations_0005.py`, `test_detection_repositories.py`, `backend/tests/integration/jobs/test_aggregate_daily.py`, `backend/tests/integration/api/test_read_api.py`
 
 **Patterns to follow:**
 - SQLAlchemy 2.0 `select()` / `insert().on_conflict_*`; one session passed in; no session creation in repositories
@@ -239,10 +237,7 @@ Lead (Phase 0):
   NEW  docs/contracts/reporting-views.md
 
 Agent 1 (Backend data + read API):
-  NEW  backend/alembic/versions/0004_detection.py
   NEW  backend/alembic/versions/0005_reporting_views.py
-  MOD  backend/app/db/models/stats.py
-  MOD  backend/app/db/models/quarantine.py
   NEW  backend/app/db/repositories/executions.py
   NEW  backend/app/db/repositories/detection.py
   NEW  backend/app/db/repositories/stats.py
@@ -250,7 +245,7 @@ Agent 1 (Backend data + read API):
   NEW  backend/app/api/read.py
   NEW  backend/app/api/schemas/read.py
   NEW  backend/app/api/service_auth.py
-  NEW  backend/tests/integration/db/test_migrations_0004_0005.py
+  NEW  backend/tests/integration/db/test_migrations_0005.py
   NEW  backend/tests/integration/db/test_detection_repositories.py
   NEW  backend/tests/integration/jobs/test_aggregate_daily.py
   NEW  backend/tests/integration/api/test_read_api.py

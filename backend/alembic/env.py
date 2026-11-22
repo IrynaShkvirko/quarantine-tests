@@ -6,7 +6,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.db.base import Base
+import app.db.models  # noqa: F401  registers every table on Base.metadata
+from app.db.base import Base, include_object
 from app.settings import get_settings
 
 config = context.config
@@ -23,7 +24,9 @@ def _database_url() -> str:
 
 
 def _run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, include_object=include_object
+    )
     with context.begin_transaction():
         context.run_migrations()
 
