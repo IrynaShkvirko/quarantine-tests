@@ -9,7 +9,7 @@ Rules for every agent and person working in this repo. Read this first, then the
 - **Design spec (source of truth):** `docs/architecture.md`. Issues, requirements and plans cite it by section (§3.4). If an issue and the spec disagree, stop and ask; never pick one silently.
 - **Tasks:** GitHub Issues titled `[M0-01] ...`, grouped into milestones M0–M7 on the "Flaky Test Quarantine" project board. One issue per PR.
 - **Feature work:** design in `docs/feature-requirements/`, detailed requirements in `docs/requirements/`, agent plans in `docs/plans/`, spike findings in `docs/spikes/`, contracts in `docs/contracts/`.
-- **Status:** M0. `make setup`, `make lint`, `make typecheck` and `make test` work (M0-01). `make up`, `make down`, docker-compose and `pytest -m integration` arrive with M0-05 and M0-06. Until a command is marked done in its issue, don't rely on it, and don't invent other commands or folders.
+- **Status:** M0. `make setup`, `make lint`, `make typecheck` and `make test` work (M0-01). `make up`, `make down` and docker-compose work (M0-05); `pytest -m integration` and the backend skeleton work (M0-06). Until a command is marked done in its issue, don't rely on it, and don't invent other commands or folders.
 
 ## Stack
 
