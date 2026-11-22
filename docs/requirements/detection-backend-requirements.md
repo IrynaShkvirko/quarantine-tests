@@ -75,17 +75,13 @@
 
 ## 1. Data Model Changes
 
-Schema v1 (§10, M0-09) already has every table this feature writes. Two columns and one view set are added.
+Schema v1 (§10, M0-09) already has every table and column this feature writes, including `daily_test_stats.flips`, `quarantine_records.shadow_outcome` and both detection indexes (`ci_runs (repository_id, commit_sha, environment)`, unique `flaky_events (test_id, commit_sha, environment)`). Only the reporting views are added.
 
 | Change | Table / object | Why | Architecture |
 |--------|----------------|-----|--------------|
-| ADD `flips int NOT NULL DEFAULT 0` | `daily_test_stats` | REQ-4.5 flip trend | Added in architecture v2.2 (§10) |
-| ADD `shadow_outcome text NULL` with CHECK in (`auto_quarantine`, `needs_lead_approval`, `protected_alert`) | `quarantine_records` | REQ-5.3 what enforce mode would do | Added in architecture v2.2 (§10) |
-| ADD index `ci_runs (repository_id, commit_sha, environment)` | `ci_runs` | REQ-3.2 cross-run lookup | Implied by §10 indexes |
 | CREATE views | `reporting.v_flaky_tests`, `v_flakiness_daily`, `v_shadow_decisions`, `v_environmental_runs` | Dashboards and read API | §10 Grafana contract (`v_environmental_runs` added in v2.2) |
 
 **Acceptance — Data Model:**
-- [ ] Migration `0004_detection` adds the two columns and the index, with a working downgrade
 - [ ] Migration `0005_reporting_views` creates the four views; `grafana_ro` can `SELECT` them
 
 ---
@@ -386,7 +382,7 @@ Settings (env): `FQ_READ_API_TOKEN`, `FQ_GITHUB_WEBHOOK_SECRET`, `FQ_CONFIG_REPO
 | **0** | Contracts: domain input/output dataclasses, view column lists | — |
 | **1** | Pure domain: fingerprint, classifier, mass failure, evidence, rates, policy, state machine | Phase 0 |
 | | Ownership: CODEOWNERS parser, resolver | Phase 0 |
-| | Data: migration 0004, repositories, reporting views (0005) | Phase 0 |
+| | Data: repositories, reporting views (0005) | Phase 0 |
 | **2** | Config sync job + webhook | Ownership |
 | | Daily aggregation job | Data |
 | **3** | Detection tasks: classify run → evidence → evaluate candidate → shadow record | Phases 1–2 |
