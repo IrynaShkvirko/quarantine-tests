@@ -1,0 +1,6 @@
+# Extra patterns on top of the built-in ones (§13). Matches become [MASKED:<replacement_type>].
+version: 1
+rules:
+  - name: internal-hostname
+    pattern: '\b[a-z0-9-]+\.corp\.acme\.test\b'
+    replacement_type: hostname

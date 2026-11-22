@@ -1,0 +1,420 @@
+{
+  "$defs": {
+    "MassFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "ratio": {
+          "default": 0.2,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "min_tests": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Min Tests",
+          "type": "integer"
+        },
+        "single_fingerprint_tests": {
+          "default": 25,
+          "minimum": 1,
+          "title": "Single Fingerprint Tests",
+          "type": "integer"
+        }
+      },
+      "title": "MassFailure",
+      "type": "object"
+    },
+    "NeverQuarantine": {
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Paths",
+          "type": "array"
+        },
+        "tests": {
+          "items": {
+            "pattern": "^(pytest|playwright|jest)::[^:]+::.+$",
+            "type": "string"
+          },
+          "title": "Tests",
+          "type": "array"
+        },
+        "markers": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Markers",
+          "type": "array"
+        }
+      },
+      "title": "NeverQuarantine",
+      "type": "object"
+    },
+    "NightlyQuarantineJob": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_minutes": {
+          "default": 60,
+          "minimum": 1,
+          "title": "Budget Minutes",
+          "type": "integer"
+        },
+        "shards": {
+          "default": 4,
+          "minimum": 1,
+          "title": "Shards",
+          "type": "integer"
+        },
+        "monitoring_repetitions": {
+          "default": 3,
+          "minimum": 1,
+          "title": "Monitoring Repetitions",
+          "type": "integer"
+        }
+      },
+      "title": "NightlyQuarantineJob",
+      "type": "object"
+    },
+    "PolicyOverrides": {
+      "additionalProperties": false,
+      "description": "A subset of ``Defaults``. A nested group (e.g. ``mass_failure``) is replaced whole.",
+      "properties": {
+        "reruns": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reruns"
+        },
+        "flakiness_threshold": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flakiness Threshold"
+        },
+        "min_flaky_occurrences": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Flaky Occurrences"
+        },
+        "rate_method": {
+          "anyOf": [
+            {
+              "enum": [
+                "simple",
+                "wilson"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rate Method"
+        },
+        "window_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Window Days"
+        },
+        "window_min_executions": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Window Min Executions"
+        },
+        "team_cap": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team Cap"
+        },
+        "team_cap_min_tests": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team Cap Min Tests"
+        },
+        "verification_repetitions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerificationRepetitions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "probation_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Probation Days"
+        },
+        "sla_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sla Days"
+        },
+        "sla_calendar": {
+          "anyOf": [
+            {
+              "enum": [
+                "calendar",
+                "business"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sla Calendar"
+        },
+        "max_quarantine_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Quarantine Days"
+        },
+        "fix_extension_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fix Extension Days"
+        },
+        "mass_failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MassFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "orphan_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orphan Days"
+        },
+        "inventory_stale_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inventory Stale Days"
+        },
+        "nightly_quarantine_job": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NightlyQuarantineJob"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PolicyOverrides",
+      "type": "object"
+    },
+    "VerificationRepetitions": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Unit",
+          "type": "integer"
+        },
+        "api": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Api",
+          "type": "integer"
+        },
+        "integration": {
+          "default": 25,
+          "minimum": 1,
+          "title": "Integration",
+          "type": "integer"
+        },
+        "e2e": {
+          "default": 10,
+          "minimum": 1,
+          "title": "E2E",
+          "type": "integer"
+        },
+        "unclassified": {
+          "default": 25,
+          "minimum": 1,
+          "title": "Unclassified",
+          "type": "integer"
+        }
+      },
+      "title": "VerificationRepetitions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "mode": {
+      "enum": [
+        "shadow",
+        "enforce"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "never_quarantine": {
+      "$ref": "#/$defs/NeverQuarantine",
+      "default": {
+        "paths": [],
+        "tests": [],
+        "markers": []
+      }
+    },
+    "overrides": {
+      "$ref": "#/$defs/PolicyOverrides",
+      "default": {
+        "reruns": null,
+        "flakiness_threshold": null,
+        "min_flaky_occurrences": null,
+        "rate_method": null,
+        "window_days": null,
+        "window_min_executions": null,
+        "team_cap": null,
+        "team_cap_min_tests": null,
+        "verification_repetitions": null,
+        "probation_days": null,
+        "sla_days": null,
+        "sla_calendar": null,
+        "max_quarantine_days": null,
+        "fix_extension_days": null,
+        "mass_failure": null,
+        "orphan_days": null,
+        "inventory_stale_days": null,
+        "nightly_quarantine_job": null
+      }
+    }
+  },
+  "required": [
+    "version",
+    "mode"
+  ],
+  "title": "QuarantinePolicy",
+  "type": "object"
+}

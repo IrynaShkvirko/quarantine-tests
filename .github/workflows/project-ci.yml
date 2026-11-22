@@ -38,6 +38,7 @@ jobs:
           filters: |
             python:
               - 'backend/**'
+              - 'config-example/**'
               - 'plugins/pytest-flaky-reporter/**'
               - 'ci/fq-cli/**'
               - 'pyproject.toml'
@@ -105,6 +106,12 @@ jobs:
       - run: uv sync --frozen --all-packages
       - run: make lint
       - run: make typecheck
+      - name: Committed JSON Schemas are up to date
+        run: |
+          rm -rf config-example/schemas
+          uv run fq-admin export-schemas
+          git diff --exit-code -- config-example/schemas
+          test -z "$(git status --porcelain -- config-example/schemas)"
       - name: pytest with coverage
         run: >
           uv run pytest

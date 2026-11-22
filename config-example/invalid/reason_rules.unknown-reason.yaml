@@ -1,0 +1,10 @@
+version: 1
+rules:
+  - reason: slow
+    exception_types: [TimeoutError]
+    message_patterns: ['waiting for selector']
+  - reason: external_dependency
+    exception_types: [ConnectionRefusedError]
+    message_patterns: ['ECONNRESET']
+  - reason: order_dependency
+    message_patterns: ['IntegrityError: duplicate key']

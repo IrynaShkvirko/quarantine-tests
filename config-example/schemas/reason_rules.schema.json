@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "Reason": {
+      "enum": [
+        "timing",
+        "order_dependency",
+        "concurrency",
+        "external_dependency",
+        "test_data_env",
+        "nondeterminism",
+        "ci_infra",
+        "product_bug",
+        "untriaged"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "ReasonRule": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/Reason"
+        },
+        "exception_types": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Exception Types",
+          "type": "array"
+        },
+        "message_patterns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Message Patterns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "ReasonRule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/ReasonRule"
+      },
+      "title": "Rules",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "rules"
+  ],
+  "title": "ReasonRules",
+  "type": "object"
+}

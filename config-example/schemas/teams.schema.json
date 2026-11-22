@@ -1,0 +1,478 @@
+{
+  "$defs": {
+    "Defaults": {
+      "additionalProperties": false,
+      "properties": {
+        "reruns": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Reruns",
+          "type": "integer"
+        },
+        "flakiness_threshold": {
+          "default": 0.05,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Flakiness Threshold",
+          "type": "number"
+        },
+        "min_flaky_occurrences": {
+          "default": 2,
+          "minimum": 1,
+          "title": "Min Flaky Occurrences",
+          "type": "integer"
+        },
+        "rate_method": {
+          "default": "simple",
+          "enum": [
+            "simple",
+            "wilson"
+          ],
+          "title": "Rate Method",
+          "type": "string"
+        },
+        "window_days": {
+          "default": 14,
+          "minimum": 1,
+          "title": "Window Days",
+          "type": "integer"
+        },
+        "window_min_executions": {
+          "default": 30,
+          "minimum": 1,
+          "title": "Window Min Executions",
+          "type": "integer"
+        },
+        "team_cap": {
+          "default": 0.05,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Team Cap",
+          "type": "number"
+        },
+        "team_cap_min_tests": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Team Cap Min Tests",
+          "type": "integer"
+        },
+        "verification_repetitions": {
+          "$ref": "#/$defs/VerificationRepetitions",
+          "default": {
+            "unit": 50,
+            "api": 50,
+            "integration": 25,
+            "e2e": 10,
+            "unclassified": 25
+          }
+        },
+        "probation_days": {
+          "default": 7,
+          "minimum": 1,
+          "title": "Probation Days",
+          "type": "integer"
+        },
+        "sla_days": {
+          "default": 4,
+          "minimum": 1,
+          "title": "Sla Days",
+          "type": "integer"
+        },
+        "sla_calendar": {
+          "default": "calendar",
+          "enum": [
+            "calendar",
+            "business"
+          ],
+          "title": "Sla Calendar",
+          "type": "string"
+        },
+        "max_quarantine_days": {
+          "default": 30,
+          "minimum": 1,
+          "title": "Max Quarantine Days",
+          "type": "integer"
+        },
+        "fix_extension_days": {
+          "default": 14,
+          "minimum": 1,
+          "title": "Fix Extension Days",
+          "type": "integer"
+        },
+        "mass_failure": {
+          "$ref": "#/$defs/MassFailure",
+          "default": {
+            "ratio": 0.2,
+            "min_tests": 50,
+            "single_fingerprint_tests": 25
+          }
+        },
+        "orphan_days": {
+          "default": 7,
+          "minimum": 1,
+          "title": "Orphan Days",
+          "type": "integer"
+        },
+        "inventory_stale_days": {
+          "default": 30,
+          "minimum": 1,
+          "title": "Inventory Stale Days",
+          "type": "integer"
+        },
+        "nightly_quarantine_job": {
+          "$ref": "#/$defs/NightlyQuarantineJob",
+          "default": {
+            "budget_minutes": 60,
+            "shards": 4,
+            "monitoring_repetitions": 3
+          }
+        }
+      },
+      "title": "Defaults",
+      "type": "object"
+    },
+    "Jira": {
+      "additionalProperties": false,
+      "properties": {
+        "project_key": {
+          "pattern": "^[A-Z][A-Z0-9]+$",
+          "title": "Project Key",
+          "type": "string"
+        },
+        "component": {
+          "minLength": 1,
+          "title": "Component",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key",
+        "component"
+      ],
+      "title": "Jira",
+      "type": "object"
+    },
+    "JobRule": {
+      "additionalProperties": false,
+      "properties": {
+        "pattern": {
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/Level"
+        }
+      },
+      "required": [
+        "pattern",
+        "level"
+      ],
+      "title": "JobRule",
+      "type": "object"
+    },
+    "Level": {
+      "enum": [
+        "unit",
+        "integration",
+        "api",
+        "e2e"
+      ],
+      "title": "Level",
+      "type": "string"
+    },
+    "Levels": {
+      "additionalProperties": false,
+      "properties": {
+        "path_rules": {
+          "items": {
+            "$ref": "#/$defs/PathRule"
+          },
+          "title": "Path Rules",
+          "type": "array"
+        },
+        "job_rules": {
+          "items": {
+            "$ref": "#/$defs/JobRule"
+          },
+          "title": "Job Rules",
+          "type": "array"
+        }
+      },
+      "title": "Levels",
+      "type": "object"
+    },
+    "MassFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "ratio": {
+          "default": 0.2,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "min_tests": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Min Tests",
+          "type": "integer"
+        },
+        "single_fingerprint_tests": {
+          "default": 25,
+          "minimum": 1,
+          "title": "Single Fingerprint Tests",
+          "type": "integer"
+        }
+      },
+      "title": "MassFailure",
+      "type": "object"
+    },
+    "NightlyQuarantineJob": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_minutes": {
+          "default": 60,
+          "minimum": 1,
+          "title": "Budget Minutes",
+          "type": "integer"
+        },
+        "shards": {
+          "default": 4,
+          "minimum": 1,
+          "title": "Shards",
+          "type": "integer"
+        },
+        "monitoring_repetitions": {
+          "default": 3,
+          "minimum": 1,
+          "title": "Monitoring Repetitions",
+          "type": "integer"
+        }
+      },
+      "title": "NightlyQuarantineJob",
+      "type": "object"
+    },
+    "PathRule": {
+      "additionalProperties": false,
+      "properties": {
+        "glob": {
+          "minLength": 1,
+          "title": "Glob",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/Level"
+        }
+      },
+      "required": [
+        "glob",
+        "level"
+      ],
+      "title": "PathRule",
+      "type": "object"
+    },
+    "ProductArea": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "paths": {
+          "additionalProperties": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "minLength": 1
+          },
+          "title": "Paths",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "paths"
+      ],
+      "title": "ProductArea",
+      "type": "object"
+    },
+    "Slack": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "lead_user_id": {
+          "minLength": 1,
+          "title": "Lead User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "lead_user_id"
+      ],
+      "title": "Slack",
+      "type": "object"
+    },
+    "Team": {
+      "additionalProperties": false,
+      "properties": {
+        "slug": {
+          "minLength": 1,
+          "title": "Slug",
+          "type": "string"
+        },
+        "github_team": {
+          "minLength": 1,
+          "title": "Github Team",
+          "type": "string"
+        },
+        "jira": {
+          "$ref": "#/$defs/Jira"
+        },
+        "slack": {
+          "$ref": "#/$defs/Slack"
+        },
+        "lead_jira_account_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lead Jira Account Id"
+        },
+        "product_areas": {
+          "items": {
+            "$ref": "#/$defs/ProductArea"
+          },
+          "title": "Product Areas",
+          "type": "array"
+        }
+      },
+      "required": [
+        "slug",
+        "github_team",
+        "jira",
+        "slack"
+      ],
+      "title": "Team",
+      "type": "object"
+    },
+    "VerificationRepetitions": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Unit",
+          "type": "integer"
+        },
+        "api": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Api",
+          "type": "integer"
+        },
+        "integration": {
+          "default": 25,
+          "minimum": 1,
+          "title": "Integration",
+          "type": "integer"
+        },
+        "e2e": {
+          "default": 10,
+          "minimum": 1,
+          "title": "E2E",
+          "type": "integer"
+        },
+        "unclassified": {
+          "default": 25,
+          "minimum": 1,
+          "title": "Unclassified",
+          "type": "integer"
+        }
+      },
+      "title": "VerificationRepetitions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "teams": {
+      "items": {
+        "$ref": "#/$defs/Team"
+      },
+      "title": "Teams",
+      "type": "array"
+    },
+    "levels": {
+      "$ref": "#/$defs/Levels",
+      "default": {
+        "path_rules": [],
+        "job_rules": []
+      }
+    },
+    "defaults": {
+      "$ref": "#/$defs/Defaults",
+      "default": {
+        "reruns": 2,
+        "flakiness_threshold": 0.05,
+        "min_flaky_occurrences": 2,
+        "rate_method": "simple",
+        "window_days": 14,
+        "window_min_executions": 30,
+        "team_cap": 0.05,
+        "team_cap_min_tests": 1,
+        "verification_repetitions": {
+          "api": 50,
+          "e2e": 10,
+          "integration": 25,
+          "unclassified": 25,
+          "unit": 50
+        },
+        "probation_days": 7,
+        "sla_days": 4,
+        "sla_calendar": "calendar",
+        "max_quarantine_days": 30,
+        "fix_extension_days": 14,
+        "mass_failure": {
+          "min_tests": 50,
+          "ratio": 0.2,
+          "single_fingerprint_tests": 25
+        },
+        "orphan_days": 7,
+        "inventory_stale_days": 30,
+        "nightly_quarantine_job": {
+          "budget_minutes": 60,
+          "monitoring_repetitions": 3,
+          "shards": 4
+        }
+      }
+    }
+  },
+  "required": [
+    "version",
+    "teams"
+  ],
+  "title": "TeamsConfig",
+  "type": "object"
+}
