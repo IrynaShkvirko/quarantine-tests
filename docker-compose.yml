@@ -9,7 +9,7 @@ x-backend: &backend
 x-backend-env: &backend-env
   FQ_DATABASE_URL: postgresql+psycopg://fq:${POSTGRES_PASSWORD}@db:5432/fq
   FQ_LOG_LEVEL: ${FQ_LOG_LEVEL:-INFO}
-  FQ_ENV: ${FQ_ENV:-dev}
+  FQ_ENV: ${FQ_ENV:-local}
 
 services:
   db:

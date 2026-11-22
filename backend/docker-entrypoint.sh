@@ -8,12 +8,12 @@ role="${1:-api}"
 case "$role" in
   api)
     if [ -n "${FQ_API_RELOAD:-}" ]; then
-      exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend/app
+      exec uvicorn --factory app.main:create_app --host 0.0.0.0 --port 8000 --no-access-log --reload --reload-dir /app/backend/app
     fi
-    exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+    exec uvicorn --factory app.main:create_app --host 0.0.0.0 --port 8000 --no-access-log
     ;;
   worker)
-    exec procrastinate --app=app.workers.app.app worker
+    exec python -m app worker
     ;;
   job)
     exec python -m app.jobs "$@"
@@ -26,12 +26,9 @@ case "$role" in
         *) echo "FQ_MIGRATE_TEST_DB needs FQ_DATABASE_URL to end in /fq" >&2; exit 2 ;;
       esac
       alembic upgrade head
-      python -m app.workers.schema
-      FQ_DATABASE_URL="$test_url" alembic upgrade head
-      FQ_DATABASE_URL="$test_url" exec python -m app.workers.schema
+      FQ_DATABASE_URL="$test_url" exec alembic upgrade head
     fi
-    alembic upgrade head
-    exec python -m app.workers.schema
+    exec alembic upgrade head
     ;;
   *)
     exec "$role" "$@"

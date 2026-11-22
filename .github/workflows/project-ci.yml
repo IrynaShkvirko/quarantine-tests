@@ -139,7 +139,7 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
 
-  # Added empty now; M0-06 fills it in. Runs with the python filter because it needs the backend.
+  # Runs with the python filter because it needs the backend.
   integration:
     needs: changes
     if: needs.changes.outputs.python == 'true'

@@ -1,6 +1,6 @@
 # Development setup
 
-How to run the project locally. Some commands (`fq-admin`, `pytest -m integration`) arrive with later tasks; until then those parts of this page are the target.
+How to run the project locally. `fq-admin` only has `version` so far; `seed-demo` and `purge-demo` arrive with later tasks, and those parts of this page are the target.
 
 ## Requirements
 
@@ -20,9 +20,10 @@ make test       # unit tests
 pytest -m integration
 ```
 
-- API: `http://localhost:8000` (`/healthz` today; `/readyz` and `/metrics` arrive with the backend skeleton)
+- API: `http://localhost:8000` (`/healthz`, `/readyz`, `/metrics`)
 - Grafana: `http://localhost:3000`, login from `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` in `.env`
 - Postgres: `localhost:5433` (`FQ_DB_HOST_PORT`), databases `fq` and `fq_test`
+- `FQ_ENV` is `local` (readable console logs), `ci` or `prod` (JSON logs). If your `.env` still says `FQ_ENV=dev` from before M0-06, change it to `local`, or the API and worker will not start.
 
 ### Local environment
 
