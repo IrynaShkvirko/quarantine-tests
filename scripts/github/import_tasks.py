@@ -5,7 +5,7 @@ Safe to run again: issues are matched by the trailing `<!-- fq-task-id: M0-01 --
 (fallback: `[M0-01]` title prefix) and only changed when something differs.
 See docs/tasks/README.md. Needs `gh` logged in with scopes `repo` and `project`.
 
-Usage: import_tasks.py --tasks tasks.csv --repo owner/name [--bodies docs/tasks/]
+Usage: import_tasks.py --tasks tasks.csv [--repo owner/name] [--bodies docs/tasks/]
                        [--milestones milestones.csv] [--dry-run]
 """
 
@@ -16,6 +16,7 @@ import csv
 import io
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -829,6 +830,20 @@ class RealGh:
 # ---------------------------------------------------------------- cli
 
 
+def default_repo() -> str | None:
+    """$FQ_GITHUB_REPO, else the repo of the current directory (`gh repo view`)."""
+    if repo := os.environ.get("FQ_GITHUB_REPO"):
+        return repo
+    res = subprocess.run(
+        ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+        capture_output=True,
+        text=True,
+        timeout=GH_TIMEOUT_S,
+        check=False,
+    )
+    return res.stdout.strip() or None if res.returncode == 0 else None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -836,11 +851,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--tasks", type=Path, required=True, help="Implementation Plan sheet exported as CSV"
     )
-    ap.add_argument("--repo", required=True, help="owner/name")
+    ap.add_argument("--repo", help="owner/name (default: $FQ_GITHUB_REPO, else the current repo)")
     ap.add_argument("--bodies", type=Path, help="folder with one Markdown body per task (M0-01.md)")
     ap.add_argument("--milestones", type=Path, help="optional CSV: Milestone, Description")
     ap.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     args = ap.parse_args(argv)
+    args.repo = args.repo or default_repo()
+    if not args.repo:
+        ap.error("no repo: pass --repo, set FQ_GITHUB_REPO, or run inside a clone")
     if not re.fullmatch(
         r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+", args.repo
     ) or args.repo.endswith(("/.", "/..")):

@@ -354,3 +354,8 @@ def test_body_file_found_in_milestone_subfolder(tmp_path: Path) -> None:
     (tmp_path / "M0").mkdir()
     (tmp_path / "M0" / "M0-03.md").write_text("from file\n")
     assert it.build_body(_task(depends=()), tmp_path, {}).startswith("from file")
+
+
+def test_default_repo_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FQ_GITHUB_REPO", "acme/widgets")
+    assert it.default_repo() == "acme/widgets"

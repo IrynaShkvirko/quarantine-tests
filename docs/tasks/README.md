@@ -10,10 +10,9 @@ Tasks live in GitHub Issues, milestones and the "Flaky Test Quarantine" project 
 
    ```bash
    gh auth login   # scopes: repo, project
-   python scripts/github/import_tasks.py --tasks tasks.csv --bodies docs/tasks/ \
-     --repo IrynaShkvirko/quarantine-tests --dry-run
-   python scripts/github/import_tasks.py --tasks tasks.csv --bodies docs/tasks/ \
-     --repo IrynaShkvirko/quarantine-tests
+   export FQ_GITHUB_REPO=owner/name   # or pass --repo; default: the repo of the current directory
+   python scripts/github/import_tasks.py --tasks tasks.csv --bodies docs/tasks/ --dry-run
+   python scripts/github/import_tasks.py --tasks tasks.csv --bodies docs/tasks/
    ```
 
    Add `--milestones milestones.csv` to set milestone descriptions.
