@@ -1,0 +1,11 @@
+# Managed by flaky-quarantine-bot. Changes go through bot PRs.
+version: 1
+tests:
+  - id: 'pytest::tests/api/test_orders.py::test_create_order[eu]'
+    jira: PAY-412
+    since: 2026-11-19
+    reason_suggested: timing
+  - id: 'playwright::e2e/checkout.spec.ts::Checkout > pays with saved card'
+    jira: PAY-415
+    since: 2026-11-20
+    reason_suggested: external_dependency

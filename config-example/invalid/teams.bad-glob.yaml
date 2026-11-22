@@ -1,0 +1,55 @@
+version: 1
+teams:
+  - slug: payments
+    github_team: '@acme/payments'
+    jira:
+      project_key: PAY
+      component: 'Test Automation'
+    slack:
+      channel: '#payments-quality'
+      lead_user_id: U0123ABCD
+    lead_jira_account_id: '5f1c00e2'
+    product_areas:
+      - name: checkout
+        paths:
+          shop-web: ['e2e/checkout/**', 'src/checkout/**']
+          shop-api: ['tests/api/payments/**']
+
+  - slug: unowned
+    github_team: '@acme/qa'
+    jira: { project_key: QA, component: 'Flaky triage' }
+    slack: { channel: '#qa-flaky', lead_user_id: U0456EFGH }
+
+levels:
+  path_rules:
+    - { glob: '**/tests/unit/**', level: unit }
+    - { glob: '**/__tests__/**', level: unit }
+    - { glob: '**/tests/integration/**', level: integration }
+    - { glob: '**/tests/api/**', level: api }
+    - { glob: 'e2e/[a', level: e2e }
+  job_rules:
+    - { pattern: 'e2e', level: e2e }
+    - { pattern: 'integration', level: integration }
+
+defaults:
+  reruns: 2
+  flakiness_threshold: 0.05
+  min_flaky_occurrences: 2
+  rate_method: simple
+  window_days: 14
+  window_min_executions: 30
+  team_cap: 0.05
+  team_cap_min_tests: 1
+  verification_repetitions: { unit: 50, api: 50, integration: 25, e2e: 10, unclassified: 25 }
+  probation_days: 7
+  sla_days: 4
+  sla_calendar: calendar
+  max_quarantine_days: 30
+  fix_extension_days: 14
+  mass_failure: { ratio: 0.20, min_tests: 50, single_fingerprint_tests: 25 }
+  orphan_days: 7
+  inventory_stale_days: 30
+  nightly_quarantine_job:
+    budget_minutes: 60
+    shards: 4
+    monitoring_repetitions: 3

@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "MaskingRule": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "pattern": {
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        },
+        "replacement_type": {
+          "minLength": 1,
+          "title": "Replacement Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "replacement_type"
+      ],
+      "title": "MaskingRule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/MaskingRule"
+      },
+      "title": "Rules",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "rules"
+  ],
+  "title": "MaskingRules",
+  "type": "object"
+}

@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "QuarantinedTest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^(pytest|playwright|jest)::[^:]+::.+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "jira": {
+          "pattern": "^[A-Z][A-Z0-9]+-\\d+$",
+          "title": "Jira",
+          "type": "string"
+        },
+        "since": {
+          "format": "date",
+          "title": "Since",
+          "type": "string"
+        },
+        "reason_suggested": {
+          "$ref": "#/$defs/Reason"
+        }
+      },
+      "required": [
+        "id",
+        "jira",
+        "since",
+        "reason_suggested"
+      ],
+      "title": "QuarantinedTest",
+      "type": "object"
+    },
+    "Reason": {
+      "enum": [
+        "timing",
+        "order_dependency",
+        "concurrency",
+        "external_dependency",
+        "test_data_env",
+        "nondeterminism",
+        "ci_infra",
+        "product_bug",
+        "untriaged"
+      ],
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "tests": {
+      "items": {
+        "$ref": "#/$defs/QuarantinedTest"
+      },
+      "title": "Tests",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "tests"
+  ],
+  "title": "QuarantineList",
+  "type": "object"
+}
