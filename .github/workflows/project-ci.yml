@@ -1,0 +1,279 @@
+name: project-ci
+
+# CI for this repository itself (not the reusable workflow it ships to other repos).
+# Branch protection requires exactly two checks: `ci-ok` and `docs-only` (see docs/CONTRIBUTING.md).
+# The `docs` workflow is deliberately NOT required.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Cancel older runs of the same branch / PR. Never cancel runs on main.
+concurrency:
+  group: project-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      node: ${{ steps.filter.outputs.node }}
+      docker: ${{ steps.filter.outputs.docker }}
+      code: ${{ steps.code-filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'backend/**'
+              - 'plugins/pytest-flaky-reporter/**'
+              - 'ci/fq-cli/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.python-version'
+              - 'mypy.ini'
+              - 'Makefile'
+              - '.github/workflows/project-ci.yml'
+            node:
+              - 'plugins/playwright-flaky-reporter/**'
+              - 'plugins/jest-flaky-reporter/**'
+              - 'ui/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'eslint.config.js'
+              - 'tsconfig.base.json'
+              - '.prettierrc'
+              - '.prettierignore'
+              - 'Makefile'
+              - '.github/workflows/project-ci.yml'
+            docker:
+              - 'backend/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.python-version'
+              - '.github/workflows/project-ci.yml'
+      # Separate step: `every` makes a file count only if it matches ALL patterns (i.e. it is
+      # not documentation). With the default `some`, '**' would match everything.
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        id: code-filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+              - '!docs-site/content/**'
+              - '!README.md'
+
+  python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+      # Node is needed because `make lint` and `make typecheck` also run eslint, prettier and tsc.
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --frozen --all-packages
+      - run: make lint
+      - run: make typecheck
+      - name: pytest with coverage
+        run: >
+          uv run pytest
+          --cov=backend --cov=plugins/pytest-flaky-reporter --cov=ci/fq-cli
+          --cov-report=xml:coverage.xml --cov-report=term
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  node:
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Root script (eslint + prettier). `pnpm -r lint` would skip the root and lint nothing.
+      - run: pnpm lint
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+
+  # Added empty now; M0-06 fills it in. Runs with the python filter because it needs the backend.
+  integration:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fq
+          POSTGRES_PASSWORD: fq
+          POSTGRES_DB: fq
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U fq"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FQ_DATABASE_URL: postgresql+psycopg://fq:fq@localhost:5432/fq
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      # TODO(M0-06): remove the hashFiles guards and the exit-code-5 allowance once
+      # backend/alembic.ini and the first integration tests exist, so a missing setup fails.
+      - name: alembic upgrade head
+        if: hashFiles('backend/alembic.ini') != ''
+        working-directory: backend
+        run: uv run alembic upgrade head
+      - name: pytest -m integration
+        if: hashFiles('backend/alembic.ini') != ''
+        # Override the default `-m 'not integration'` from addopts. Exit code 5 means no tests
+        # were collected: allowed until M0-06 adds the first integration tests.
+        run: |
+          set +e
+          uv run pytest -m integration -o addopts=""
+          rc=$?
+          if [ "$rc" -eq 5 ]; then
+            echo "::notice::No integration tests collected yet"
+            exit 0
+          fi
+          exit "$rc"
+
+  docker:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # TODO(M0-05): remove the hashFiles guards once backend/Dockerfile exists.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: hashFiles('backend/Dockerfile') != ''
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        if: hashFiles('backend/Dockerfile') != ''
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Runs the same hooks as local development on every code PR, so they can't be skipped with
+  # --no-verify. Docs-only PRs get the docs-relevant hooks in `docs-only` instead.
+  pre-commit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --frozen --all-packages
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  # Docs-only fast path. Runs only when the PR touches nothing but documentation. It runs the
+  # pre-commit hooks that apply to docs (prettier and eslint skip docs/ and *.md by config), using
+  # only the dev dependency group, so it stays well under 2 minutes. On code PRs it is skipped
+  # and `pre-commit` runs every hook instead; a skipped required job counts as passing.
+  docs-only:
+    needs: changes
+    if: needs.changes.outputs.code != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --only-group dev
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Docs hygiene hooks
+        run: |
+          for hook in end-of-file-fixer trailing-whitespace check-yaml detect-private-key; do
+            uv run --no-sync pre-commit run "$hook" --all-files --show-diff-on-failure
+          done
+
+  # The single gate for branch protection (together with `docs-only`). Always runs, and fails if
+  # any job it depends on failed, was cancelled or has an unknown result. Path-filtered jobs may
+  # be skipped.
+  ci-ok:
+    if: always()
+    needs: [changes, python, node, integration, docker, pre-commit, docs-only]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check results of all jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # Allowlist: anything other than success/skipped (failure, cancelled, unknown, or a jq
+          # error) fails. `changes` has no `if`, so it is never skipped, and exactly one of
+          # `pre-commit` / `docs-only` runs on every PR, so their failures land here too.
+          if ! echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' >/dev/null; then
+            echo "::error::At least one job failed, was cancelled, or has an unknown result"
+            exit 1
+          fi
